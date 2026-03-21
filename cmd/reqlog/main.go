@@ -58,13 +58,17 @@ Examples:
 	}
 
 	scn := scanner.NewFileScanner(p)
-	entries, err := scn.Scan(scanner.ScanConfig{
+	cfg := scanner.ScanConfig{
 		Dir:        dir,
 		RequestID:  requestID,
 		IgnoreCase: ignoreCase,
 		Key:        key,
 		Since:      since,
-	})
+	}
+	entries, err := scn.Scan(cfg)
+	if follow {
+		scn.Follow(cfg)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,5 +77,5 @@ Examples:
 		return entries[i].Timestamp.Before(entries[j].Timestamp)
 	})
 
-	formatter.Print(requestID, entries, limit)
+	formatter.Print(entries, limit)
 }

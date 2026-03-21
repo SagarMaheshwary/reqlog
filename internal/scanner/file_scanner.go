@@ -2,12 +2,14 @@ package scanner
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
+	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/parser"
 )
 
@@ -80,6 +82,67 @@ func (fs *FileScanner) Scan(cfg ScanConfig) ([]domain.LogEntry, error) {
 	})
 
 	return results, err
+}
+
+func (fs *FileScanner) Follow(cfg ScanConfig) error {
+	keys := parser.DefaultKeys
+	if cfg.Key != "" {
+		keys = []string{cfg.Key}
+	}
+
+	files := make(map[string]int64)
+	colorizor := formatter.NewColorizer()
+
+	for {
+		filepath.Walk(cfg.Dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".log") {
+				return nil
+			}
+
+			offset := files[path]
+
+			file, err := os.Open(path)
+			if err != nil {
+				return nil
+			}
+			defer file.Close()
+
+			file.Seek(offset, 0)
+
+			scanner := bufio.NewScanner(file)
+
+			for scanner.Scan() {
+				line := scanner.Text()
+
+				if !strings.Contains(line, cfg.RequestID) {
+					continue
+				}
+
+				service := strings.TrimSuffix(filepath.Base(path), ".log")
+
+				entry, fields, err := fs.parser.Parse(line, service)
+				if err != nil {
+					continue
+				}
+
+				reqID, ok := extractRequestID(fields, keys)
+				if !ok {
+					continue
+				}
+
+				if match(reqID, cfg.RequestID, cfg.IgnoreCase) {
+					fmt.Println(formatter.Format(entry, colorizor))
+				}
+			}
+
+			pos, _ := file.Seek(0, 1)
+			files[path] = pos
+
+			return nil
+		})
+
+		time.Sleep(1 * time.Second)
+	}
 }
 
 func match(foundID, requestID string, ignoreCase bool) bool {
