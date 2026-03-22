@@ -78,14 +78,14 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p, _ := parser.NewParser(parser.TypeText)
 
-		scn := NewFileScanner(p)
-		entries, err := scn.Scan(ScanConfig{
+		scn := NewFileScanner(ScanConfig{
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
 			Key:         "",
 			Since:       "",
-		})
+		}, p)
+		entries, err := scn.Scan()
 		if err != nil {
 			b.Fatalf("scan failed: %v", err)
 		}
@@ -104,14 +104,14 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p, _ := parser.NewParser(parser.TypeJSON)
 
-		scn := NewFileScanner(p)
-		entries, err := scn.Scan(ScanConfig{
+		scn := NewFileScanner(ScanConfig{
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,
 			Key:         "",
 			Since:       "",
-		})
+		}, p)
+		entries, err := scn.Scan()
 		if err != nil {
 			b.Fatalf("scan failed: %v", err)
 		}

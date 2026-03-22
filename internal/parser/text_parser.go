@@ -30,11 +30,7 @@ func (p TextParser) Parse(line string, service string) (domain.LogEntry, error) 
 	}, nil
 }
 
-func (p TextParser) ExtractField(line string, key string, keys []string) (string, bool) {
-	if key != "" {
-		return p.ExtractFieldOne(line, key)
-	}
-
+func (p TextParser) ExtractField(line string, keys []string) (string, bool) {
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
 		return "", false
@@ -44,7 +40,7 @@ func (p TextParser) ExtractField(line string, key string, keys []string) (string
 		part := parts[i]
 
 		if !strings.Contains(part, "=") {
-			break // message starts
+			continue
 		}
 
 		kv := strings.SplitN(part, "=", 2)
@@ -71,7 +67,7 @@ func (p TextParser) ExtractFieldOne(line string, key string) (string, bool) {
 	for i := 1; i < len(parts); i++ {
 		part := parts[i]
 		if !strings.Contains(part, "=") {
-			break
+			continue
 		}
 
 		if !strings.HasPrefix(part, key+"=") {

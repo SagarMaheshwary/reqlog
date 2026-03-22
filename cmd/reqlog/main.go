@@ -57,7 +57,6 @@ Examples:
 		log.Fatal(err)
 	}
 
-	scn := scanner.NewFileScanner(p)
 	cfg := scanner.ScanConfig{
 		Dir:         dir,
 		SearchValue: SearchValue,
@@ -65,10 +64,9 @@ Examples:
 		Key:         key,
 		Since:       since,
 	}
-	entries, err := scn.Scan(cfg)
-	if follow {
-		scn.Follow(cfg)
-	}
+	scn := scanner.NewFileScanner(cfg, p)
+
+	entries, err := scn.Scan()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,4 +76,8 @@ Examples:
 	})
 
 	formatter.Print(entries, limit)
+
+	if follow {
+		scn.Follow()
+	}
 }

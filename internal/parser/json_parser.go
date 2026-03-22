@@ -12,15 +12,7 @@ import (
 
 type JSONParser struct{}
 
-func (p JSONParser) ExtractField(line string, key string, keys []string) (string, bool) {
-	if key != "" {
-		result := gjson.Get(line, key)
-		if result.Exists() {
-			return result.String(), true
-		}
-		return "", false
-	}
-
+func (p JSONParser) ExtractField(line string, keys []string) (string, bool) {
 	for _, key := range keys {
 		result := gjson.Get(line, key)
 		if result.Exists() {

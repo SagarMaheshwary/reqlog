@@ -3,6 +3,7 @@ package scanner
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,24 +23,30 @@ type ScanConfig struct {
 }
 
 type FileScanner struct {
-	parser parser.LogParser
+	parser  parser.LogParser
+	offsets map[string]int64
+	config  ScanConfig
 }
 
-func NewFileScanner(p parser.LogParser) *FileScanner {
-	return &FileScanner{parser: p}
+func NewFileScanner(cfg ScanConfig, p parser.LogParser) *FileScanner {
+	return &FileScanner{
+		parser:  p,
+		offsets: make(map[string]int64),
+		config:  cfg,
+	}
 }
 
-func (fs *FileScanner) Scan(cfg ScanConfig) ([]domain.LogEntry, error) {
+func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 	var results []domain.LogEntry
 
 	keys := parser.DefaultKeys
-	if cfg.Key != "" {
-		keys = []string{cfg.Key}
+	if fs.config.Key != "" {
+		keys = []string{fs.config.Key}
 	}
 
-	sinceTime := parseSince(cfg.Since)
+	sinceTime := parseSince(fs.config.Since)
 
-	err := filepath.Walk(cfg.Dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".log") {
 			return nil
 		}
@@ -52,95 +59,94 @@ func (fs *FileScanner) Scan(cfg ScanConfig) ([]domain.LogEntry, error) {
 		}
 		defer file.Close()
 
-		scanner := bufio.NewScanner(file)
+		reader := bufio.NewReader(file)
+		var offset int64 = 0
 
-		for scanner.Scan() {
-			line := scanner.Text()
-
-			if !strings.Contains(line, cfg.SearchValue) {
-				continue
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil && err != io.EOF {
+				return err
 			}
 
-			foundID, ok := fs.parser.ExtractField(line, cfg.Key, keys)
-			if !ok {
-				continue
+			if len(line) > 0 {
+				offset += int64(len(line))
+				line = strings.TrimRight(line, "\r\n")
+
+				if !strings.Contains(line, fs.config.SearchValue) {
+					continue
+				}
+
+				foundID, ok := fs.parser.ExtractField(line, keys)
+				if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
+					entry, parseErr := fs.parser.Parse(line, service)
+					if parseErr == nil && passesSince(entry, sinceTime) {
+						results = append(results, entry)
+					}
+				}
 			}
 
-			if !match(foundID, cfg.SearchValue, cfg.IgnoreCase) {
-				continue
+			if err == io.EOF {
+				break
 			}
-
-			entry, err := fs.parser.Parse(line, service)
-			if err != nil {
-				continue
-			}
-			if !passesSince(entry, sinceTime) {
-				continue
-			}
-
-			results = append(results, entry)
 		}
-
-		return scanner.Err()
+		fs.offsets[path] = offset // save offset after historical read
+		return nil
 	})
 
 	return results, err
 }
 
-func (fs *FileScanner) Follow(cfg ScanConfig) error {
+func (fs *FileScanner) Follow() error {
 	keys := parser.DefaultKeys
-	files := make(map[string]int64)
-	colorizor := formatter.NewColorizer()
+	if fs.config.Key != "" {
+		keys = []string{fs.config.Key}
+	}
+
+	colorizer := formatter.NewColorizer()
 
 	for {
-		filepath.Walk(cfg.Dir, func(path string, info os.FileInfo, err error) error {
+		filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".log") {
 				return nil
 			}
-
-			offset := files[path]
-
+			service := strings.TrimSuffix(filepath.Base(path), ".log")
 			file, err := os.Open(path)
 			if err != nil {
 				return nil
 			}
 			defer file.Close()
 
-			file.Seek(offset, 0)
+			offset := fs.offsets[path]
+			file.Seek(offset, io.SeekStart)
+			reader := bufio.NewReader(file)
+			currentOffset := offset
 
-			scanner := bufio.NewScanner(file)
+			for {
+				line, err := reader.ReadString('\n')
+				if len(line) > 0 {
+					currentOffset += int64(len(line))
+					line = strings.TrimRight(line, "\r\n")
 
-			for scanner.Scan() {
-				line := scanner.Text()
-
-				if !strings.Contains(line, cfg.SearchValue) {
-					continue
+					if strings.Contains(line, fs.config.SearchValue) {
+						foundID, ok := fs.parser.ExtractField(line, keys)
+						if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
+							entry, parseErr := fs.parser.Parse(line, service)
+							if parseErr == nil {
+								fmt.Println(formatter.Format(entry, colorizer))
+							}
+						}
+					}
 				}
 
-				service := strings.TrimSuffix(filepath.Base(path), ".log")
-
-				foundID, ok := fs.parser.ExtractField(line, cfg.Key, keys)
-				if !ok {
-					continue
-				}
-
-				if !match(foundID, cfg.SearchValue, cfg.IgnoreCase) {
-					continue
-				}
-
-				entry, err := fs.parser.Parse(line, service)
 				if err != nil {
-					continue
-				}
-
-				if match(foundID, cfg.SearchValue, cfg.IgnoreCase) {
-					fmt.Println(formatter.Format(entry, colorizor))
+					if err == io.EOF {
+						break
+					}
+					return nil
 				}
 			}
 
-			pos, _ := file.Seek(0, 1)
-			files[path] = pos
-
+			fs.offsets[path] = currentOffset
 			return nil
 		})
 
