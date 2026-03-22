@@ -80,11 +80,11 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 
 		scn := NewFileScanner(p)
 		entries, err := scn.Scan(ScanConfig{
-			Dir:        dir,
-			RequestID:  "abc123",
-			IgnoreCase: false,
-			Key:        "",
-			Since:      "",
+			Dir:         dir,
+			SearchValue: "abc123",
+			IgnoreCase:  false,
+			Key:         "",
+			Since:       "",
 		})
 		if err != nil {
 			b.Fatalf("scan failed: %v", err)
@@ -106,11 +106,11 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 
 		scn := NewFileScanner(p)
 		entries, err := scn.Scan(ScanConfig{
-			Dir:        dir,
-			RequestID:  "json-abc",
-			IgnoreCase: false,
-			Key:        "",
-			Since:      "",
+			Dir:         dir,
+			SearchValue: "json-abc",
+			IgnoreCase:  false,
+			Key:         "",
+			Since:       "",
 		})
 		if err != nil {
 			b.Fatalf("scan failed: %v", err)

@@ -38,14 +38,14 @@ func main() {
  reqlog [flags] <request_id>
 Examples:
  reqlog abc123
- reqlog --dir ./logs abc123
- reqlog --dir ./logs --json json-abc
- reqlog --dir ./logs --json --key trace_id json-trace-1
- reqlog --dir ./logs --since 5m abc123`)
+ reqlog -dir ./logs abc123
+ reqlog -dir ./logs -json json-abc
+ reqlog -dir ./logs -json -key trace_id json-trace-1
+ reqlog -dir ./logs -since 5m abc123`)
 		os.Exit(1)
 	}
 
-	requestID := flag.Arg(0)
+	SearchValue := flag.Arg(0)
 
 	var parserType = parser.TypeText
 	if jsonMode {
@@ -59,11 +59,11 @@ Examples:
 
 	scn := scanner.NewFileScanner(p)
 	cfg := scanner.ScanConfig{
-		Dir:        dir,
-		RequestID:  requestID,
-		IgnoreCase: ignoreCase,
-		Key:        key,
-		Since:      since,
+		Dir:         dir,
+		SearchValue: SearchValue,
+		IgnoreCase:  ignoreCase,
+		Key:         key,
+		Since:       since,
 	}
 	entries, err := scn.Scan(cfg)
 	if follow {

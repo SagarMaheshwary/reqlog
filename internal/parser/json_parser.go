@@ -1,70 +1,56 @@
 package parser
 
 import (
-	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
+	"github.com/tidwall/gjson"
 )
-
-type JSONLog struct {
-	Time          string `json:"time"`
-	Timestamp     string `json:"timestamp"`
-	TS            string `json:"ts"`
-	RequestID     string `json:"request_id"`
-	ReqID         string `json:"req_id"`
-	TraceID       string `json:"trace_id"`
-	CorrelationID string `json:"correlation_id"`
-	Message       string `json:"message"`
-	Msg           string `json:"msg"`
-}
 
 type JSONParser struct{}
 
-func (p JSONParser) Parse(line string, service string) (domain.LogEntry, map[string]string, error) {
-	var log JSONLog
-
-	if err := json.Unmarshal([]byte(line), &log); err != nil {
-		return domain.LogEntry{}, nil, err
+func (p JSONParser) ExtractField(line string, key string, keys []string) (string, bool) {
+	if key != "" {
+		result := gjson.Get(line, key)
+		if result.Exists() {
+			return result.String(), true
+		}
+		return "", false
 	}
 
-	ts, ok := log.GetTimestamp()
+	for _, key := range keys {
+		result := gjson.Get(line, key)
+		if result.Exists() {
+			return result.String(), true
+		}
+	}
+	return "", false
+}
+
+func (p JSONParser) Parse(line string, service string) (domain.LogEntry, error) {
+	ts, ok := extractJSONTimestamp(line)
 	if !ok {
-		return domain.LogEntry{}, nil, fmt.Errorf("invalid timestamp")
+		return domain.LogEntry{}, fmt.Errorf("invalid timestamp")
 	}
-
-	fields := log.ToFields()
 
 	return domain.LogEntry{
 		Timestamp: ts,
 		Service:   service,
-		Message:   log.GetMessage(),
-	}, fields, nil
+		Message:   buildJSONMessage(line),
+	}, nil
 }
 
-func (l JSONLog) ToFields() map[string]string {
-	return map[string]string{
-		"request_id":     l.RequestID,
-		"req_id":         l.ReqID,
-		"trace_id":       l.TraceID,
-		"correlation_id": l.CorrelationID,
-	}
-}
-
-func (l JSONLog) GetTimestamp() (time.Time, bool) {
-	candidates := []string{
-		l.Time,
-		l.Timestamp,
-		l.TS,
-	}
-
-	for _, value := range candidates {
-		if value == "" {
+func extractJSONTimestamp(line string) (time.Time, bool) {
+	for _, key := range []string{"time", "timestamp", "ts"} {
+		value := gjson.Get(line, key)
+		if !value.Exists() {
 			continue
 		}
 
-		ts, err := time.Parse(time.RFC3339, value)
+		ts, err := time.Parse(time.RFC3339, value.String())
 		if err == nil {
 			return ts, true
 		}
@@ -73,9 +59,42 @@ func (l JSONLog) GetTimestamp() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (l JSONLog) GetMessage() string {
-	if l.Message != "" {
-		return l.Message
+func buildJSONMessage(line string) string {
+	result := gjson.Parse(line)
+	if !result.IsObject() {
+		return line
 	}
-	return l.Msg
+
+	parts := make([]string, 0, 8)
+
+	result.ForEach(func(key, value gjson.Result) bool {
+		k := key.String()
+		if isTimestampKey(k) {
+			return true
+		}
+
+		parts = append(parts, formatJSONField(k, value))
+		return true
+	})
+
+	sort.Strings(parts)
+	return strings.Join(parts, " ")
+}
+
+func isTimestampKey(key string) bool {
+	switch key {
+	case "time", "timestamp", "ts":
+		return true
+	default:
+		return false
+	}
+}
+
+func formatJSONField(key string, value gjson.Result) string {
+	switch value.Type {
+	case gjson.String:
+		return key + "=" + value.String()
+	default:
+		return key + "=" + value.Raw
+	}
 }

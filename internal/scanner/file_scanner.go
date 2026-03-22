@@ -14,11 +14,11 @@ import (
 )
 
 type ScanConfig struct {
-	Dir        string
-	RequestID  string
-	IgnoreCase bool
-	Key        string
-	Since      string
+	Dir         string
+	SearchValue string
+	IgnoreCase  bool
+	Key         string
+	Since       string
 }
 
 type FileScanner struct {
@@ -57,21 +57,24 @@ func (fs *FileScanner) Scan(cfg ScanConfig) ([]domain.LogEntry, error) {
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			if !strings.Contains(line, cfg.RequestID) {
+			if !strings.Contains(line, cfg.SearchValue) {
 				continue
 			}
 
-			entry, fields, err := fs.parser.Parse(line, service)
-			if err != nil {
-				continue
-			}
-
-			reqID, ok := extractRequestID(fields, keys)
+			foundID, ok := fs.parser.ExtractField(line, cfg.Key, keys)
 			if !ok {
 				continue
 			}
 
-			if !entryMatches(entry, reqID, cfg.RequestID, cfg.IgnoreCase, sinceTime) {
+			if !match(foundID, cfg.SearchValue, cfg.IgnoreCase) {
+				continue
+			}
+
+			entry, err := fs.parser.Parse(line, service)
+			if err != nil {
+				continue
+			}
+			if !passesSince(entry, sinceTime) {
 				continue
 			}
 
@@ -86,10 +89,6 @@ func (fs *FileScanner) Scan(cfg ScanConfig) ([]domain.LogEntry, error) {
 
 func (fs *FileScanner) Follow(cfg ScanConfig) error {
 	keys := parser.DefaultKeys
-	if cfg.Key != "" {
-		keys = []string{cfg.Key}
-	}
-
 	files := make(map[string]int64)
 	colorizor := formatter.NewColorizer()
 
@@ -114,23 +113,27 @@ func (fs *FileScanner) Follow(cfg ScanConfig) error {
 			for scanner.Scan() {
 				line := scanner.Text()
 
-				if !strings.Contains(line, cfg.RequestID) {
+				if !strings.Contains(line, cfg.SearchValue) {
 					continue
 				}
 
 				service := strings.TrimSuffix(filepath.Base(path), ".log")
 
-				entry, fields, err := fs.parser.Parse(line, service)
-				if err != nil {
-					continue
-				}
-
-				reqID, ok := extractRequestID(fields, keys)
+				foundID, ok := fs.parser.ExtractField(line, cfg.Key, keys)
 				if !ok {
 					continue
 				}
 
-				if match(reqID, cfg.RequestID, cfg.IgnoreCase) {
+				if !match(foundID, cfg.SearchValue, cfg.IgnoreCase) {
+					continue
+				}
+
+				entry, err := fs.parser.Parse(line, service)
+				if err != nil {
+					continue
+				}
+
+				if match(foundID, cfg.SearchValue, cfg.IgnoreCase) {
 					fmt.Println(formatter.Format(entry, colorizor))
 				}
 			}
@@ -145,21 +148,11 @@ func (fs *FileScanner) Follow(cfg ScanConfig) error {
 	}
 }
 
-func match(foundID, requestID string, ignoreCase bool) bool {
+func match(foundID, SearchValue string, ignoreCase bool) bool {
 	if ignoreCase {
-		return strings.EqualFold(foundID, requestID)
+		return strings.EqualFold(foundID, SearchValue)
 	}
-	return foundID == requestID
-}
-
-func entryMatches(
-	entry domain.LogEntry,
-	foundID string,
-	requestID string,
-	ignoreCase bool,
-	sinceTime time.Time,
-) bool {
-	return match(foundID, requestID, ignoreCase) && passesSince(entry, sinceTime)
+	return foundID == SearchValue
 }
 
 func passesSince(entry domain.LogEntry, sinceTime time.Time) bool {
@@ -180,13 +173,4 @@ func parseSince(s string) time.Time {
 	}
 
 	return time.Now().Add(-d)
-}
-
-func extractRequestID(fields map[string]string, keys []string) (string, bool) {
-	for _, key := range keys {
-		if value := fields[key]; value != "" {
-			return value, true
-		}
-	}
-	return "", false
 }
