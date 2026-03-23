@@ -82,7 +82,7 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
-			Key:         "",
+			Keys:        parser.DefaultKeys,
 			Since:       "",
 		}, p)
 		entries, err := scn.Scan()
@@ -108,7 +108,7 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,
-			Key:         "",
+			Keys:        parser.DefaultKeys,
 			Since:       "",
 		}, p)
 		entries, err := scn.Scan()

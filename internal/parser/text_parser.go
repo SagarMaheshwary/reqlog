@@ -50,7 +50,7 @@ func (p TextParser) ExtractField(line string, keys []string) (string, bool) {
 
 		for _, key := range keys {
 			if kv[0] == key {
-				return kv[1], true
+				return stripQuotes(kv[1]), true
 			}
 		}
 	}
@@ -58,24 +58,12 @@ func (p TextParser) ExtractField(line string, keys []string) (string, bool) {
 	return "", false
 }
 
-func (p TextParser) ExtractFieldOne(line string, key string) (string, bool) {
-	parts := strings.Fields(line)
-	if len(parts) < 2 {
-		return "", false
-	}
-
-	for i := 1; i < len(parts); i++ {
-		part := parts[i]
-		if !strings.Contains(part, "=") {
-			continue
+func stripQuotes(val string) string {
+	if len(val) >= 2 {
+		if (val[0] == '"' && val[len(val)-1] == '"') ||
+			(val[0] == '\'' && val[len(val)-1] == '\'') {
+			return val[1 : len(val)-1]
 		}
-
-		if !strings.HasPrefix(part, key+"=") {
-			continue
-		}
-
-		return part[len(key)+1:], true
 	}
-
-	return "", false
+	return val
 }

@@ -57,11 +57,15 @@ Examples:
 		log.Fatal(err)
 	}
 
+	keys := parser.DefaultKeys
+	if key != "" {
+		keys = []string{key}
+	}
 	cfg := scanner.ScanConfig{
 		Dir:         dir,
 		SearchValue: SearchValue,
 		IgnoreCase:  ignoreCase,
-		Key:         key,
+		Keys:        keys,
 		Since:       since,
 	}
 	scn := scanner.NewFileScanner(cfg, p)

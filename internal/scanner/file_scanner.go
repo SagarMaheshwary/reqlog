@@ -18,7 +18,7 @@ type ScanConfig struct {
 	Dir         string
 	SearchValue string
 	IgnoreCase  bool
-	Key         string
+	Keys        []string
 	Since       string
 }
 
@@ -38,13 +38,8 @@ func NewFileScanner(cfg ScanConfig, p parser.LogParser) *FileScanner {
 
 func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 	var results []domain.LogEntry
-
-	keys := parser.DefaultKeys
-	if fs.config.Key != "" {
-		keys = []string{fs.config.Key}
-	}
-
 	sinceTime := parseSince(fs.config.Since)
+	searchValueLower := fs.config.SearchValue
 
 	err := filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".log") {
@@ -72,11 +67,17 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 				offset += int64(len(line))
 				line = strings.TrimRight(line, "\r\n")
 
-				if !strings.Contains(line, fs.config.SearchValue) {
-					continue
+				if fs.config.IgnoreCase {
+					if !strings.Contains(strings.ToLower(line), searchValueLower) {
+						continue
+					}
+				} else {
+					if !strings.Contains(line, fs.config.SearchValue) {
+						continue
+					}
 				}
 
-				foundID, ok := fs.parser.ExtractField(line, keys)
+				foundID, ok := fs.parser.ExtractField(line, fs.config.Keys)
 				if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
 					entry, parseErr := fs.parser.Parse(line, service)
 					if parseErr == nil && passesSince(entry, sinceTime) {
@@ -97,12 +98,8 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 }
 
 func (fs *FileScanner) Follow() error {
-	keys := parser.DefaultKeys
-	if fs.config.Key != "" {
-		keys = []string{fs.config.Key}
-	}
-
 	colorizer := formatter.NewColorizer()
+	searchValueLower := fs.config.SearchValue
 
 	for {
 		filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
@@ -127,13 +124,21 @@ func (fs *FileScanner) Follow() error {
 					currentOffset += int64(len(line))
 					line = strings.TrimRight(line, "\r\n")
 
-					if strings.Contains(line, fs.config.SearchValue) {
-						foundID, ok := fs.parser.ExtractField(line, keys)
-						if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
-							entry, parseErr := fs.parser.Parse(line, service)
-							if parseErr == nil {
-								fmt.Println(formatter.Format(entry, colorizer))
-							}
+					if fs.config.IgnoreCase {
+						if !strings.Contains(strings.ToLower(line), searchValueLower) {
+							continue
+						}
+					} else {
+						if !strings.Contains(line, fs.config.SearchValue) {
+							continue
+						}
+					}
+
+					foundID, ok := fs.parser.ExtractField(line, fs.config.Keys)
+					if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
+						entry, parseErr := fs.parser.Parse(line, service)
+						if parseErr == nil {
+							fmt.Println(formatter.Format(entry, colorizer))
 						}
 					}
 				}
