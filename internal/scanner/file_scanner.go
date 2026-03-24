@@ -39,7 +39,6 @@ func NewFileScanner(cfg ScanConfig, p parser.LogParser) *FileScanner {
 func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 	var results []domain.LogEntry
 	sinceTime := parseSince(fs.config.Since)
-	searchValueLower := fs.config.SearchValue
 
 	err := filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".log") {
@@ -65,10 +64,9 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 
 			if len(line) > 0 {
 				offset += int64(len(line))
-				line = strings.TrimRight(line, "\r\n")
 
 				if fs.config.IgnoreCase {
-					if !strings.Contains(strings.ToLower(line), searchValueLower) {
+					if !containsFoldASCII(line, fs.config.SearchValue) {
 						continue
 					}
 				} else {
@@ -76,6 +74,8 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 						continue
 					}
 				}
+
+				line = strings.TrimRight(line, "\r\n")
 
 				foundID, ok := fs.parser.ExtractField(line, fs.config.Keys)
 				if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
@@ -99,7 +99,6 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 
 func (fs *FileScanner) Follow() error {
 	colorizer := formatter.NewColorizer()
-	searchValueLower := fs.config.SearchValue
 
 	for {
 		filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
@@ -122,10 +121,9 @@ func (fs *FileScanner) Follow() error {
 				line, err := reader.ReadString('\n')
 				if len(line) > 0 {
 					currentOffset += int64(len(line))
-					line = strings.TrimRight(line, "\r\n")
 
 					if fs.config.IgnoreCase {
-						if !strings.Contains(strings.ToLower(line), searchValueLower) {
+						if !containsFoldASCII(line, fs.config.SearchValue) {
 							continue
 						}
 					} else {
@@ -133,6 +131,8 @@ func (fs *FileScanner) Follow() error {
 							continue
 						}
 					}
+
+					line = strings.TrimRight(line, "\r\n")
 
 					foundID, ok := fs.parser.ExtractField(line, fs.config.Keys)
 					if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
@@ -184,4 +184,42 @@ func parseSince(s string) time.Time {
 	}
 
 	return time.Now().Add(-d)
+}
+
+func asciiLower(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return b + ('a' - 'A')
+	}
+	return b
+}
+
+func containsFoldASCII(s, substr string) bool {
+	n := len(substr)
+	if n == 0 {
+		return true
+	}
+	if n > len(s) {
+		return false
+	}
+
+	first := asciiLower(substr[0])
+
+	for i := 0; i <= len(s)-n; i++ {
+		if asciiLower(s[i]) != first {
+			continue
+		}
+
+		ok := true
+		for j := 1; j < n; j++ {
+			if asciiLower(s[i+j]) != asciiLower(substr[j]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+
+	return false
 }
