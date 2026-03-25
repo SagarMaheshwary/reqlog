@@ -212,3 +212,137 @@ func TestParseSince(t *testing.T) {
 		})
 	}
 }
+
+func TestAsciiLower(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    byte
+		expected byte
+	}{
+		{"uppercase A", 'A', 'a'},
+		{"uppercase Z", 'Z', 'z'},
+		{"lowercase a", 'a', 'a'},
+		{"lowercase z", 'z', 'z'},
+		{"number", '5', '5'},
+		{"symbol", '#', '#'},
+		{"mixed char", 'M', 'm'},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := asciiLower(tt.input)
+			if result != tt.expected {
+				t.Fatalf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestContainsFoldASCII(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		substr   string
+		expected bool
+	}{
+		{
+			name:     "exact match",
+			s:        "hello world",
+			substr:   "world",
+			expected: true,
+		},
+		{
+			name:     "case insensitive match",
+			s:        "Hello World",
+			substr:   "world",
+			expected: true,
+		},
+		{
+			name:     "case insensitive reverse",
+			s:        "hello world",
+			substr:   "WORLD",
+			expected: true,
+		},
+		{
+			name:     "no match",
+			s:        "hello world",
+			substr:   "abc",
+			expected: false,
+		},
+		{
+			name:     "substring at start",
+			s:        "Hello",
+			substr:   "he",
+			expected: true,
+		},
+		{
+			name:     "substring at end",
+			s:        "Hello",
+			substr:   "LO",
+			expected: true,
+		},
+		{
+			name:     "full string match",
+			s:        "Hello",
+			substr:   "hello",
+			expected: true,
+		},
+		{
+			name:     "empty substring",
+			s:        "hello",
+			substr:   "",
+			expected: true,
+		},
+		{
+			name:     "substring longer than string",
+			s:        "hi",
+			substr:   "hello",
+			expected: false,
+		},
+		{
+			name:     "single character match",
+			s:        "abc",
+			substr:   "B",
+			expected: true,
+		},
+		{
+			name:     "single character no match",
+			s:        "abc",
+			substr:   "D",
+			expected: false,
+		},
+		{
+			name:     "repeated pattern",
+			s:        "aaaAAA",
+			substr:   "AaA",
+			expected: true,
+		},
+		{
+			name:     "special characters unchanged",
+			s:        "hello-world",
+			substr:   "WORLD",
+			expected: true,
+		},
+		{
+			name:     "numbers",
+			s:        "abc123",
+			substr:   "123",
+			expected: true,
+		},
+		{
+			name:     "partial overlap no match",
+			s:        "abc",
+			substr:   "ac",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := containsFoldASCII(tt.s, tt.substr)
+			if result != tt.expected {
+				t.Fatalf("expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}

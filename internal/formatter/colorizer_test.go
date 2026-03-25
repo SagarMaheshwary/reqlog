@@ -72,3 +72,12 @@ func TestFnv32a_EmptyString(t *testing.T) {
 		t.Fatalf("expected fnv32a(empty) = %d, got %d", want, got)
 	}
 }
+
+func contains(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}

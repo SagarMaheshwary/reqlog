@@ -67,6 +67,7 @@ Examples:
 		IgnoreCase:  ignoreCase,
 		Keys:        keys,
 		Since:       since,
+		Limit:       limit,
 	}
 	scn := scanner.NewFileScanner(cfg, p)
 
@@ -79,7 +80,10 @@ Examples:
 		return entries[i].Timestamp.Before(entries[j].Timestamp)
 	})
 
-	formatter.Print(entries, limit)
+	colorizer := formatter.NewColorizer()
+	for _, e := range entries {
+		fmt.Println(formatter.Format(e, colorizer))
+	}
 
 	if follow {
 		scn.Follow()

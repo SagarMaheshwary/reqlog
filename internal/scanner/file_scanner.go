@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"bufio"
+	"container/heap"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +21,7 @@ type ScanConfig struct {
 	IgnoreCase  bool
 	Keys        []string
 	Since       string
+	Limit       int
 }
 
 type FileScanner struct {
@@ -37,8 +39,13 @@ func NewFileScanner(cfg ScanConfig, p parser.LogParser) *FileScanner {
 }
 
 func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
+	var h entryHeap
 	var results []domain.LogEntry
 	sinceTime := parseSince(fs.config.Since)
+
+	if fs.config.Limit > 0 {
+		heap.Init(&h)
+	}
 
 	err := filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".log") {
@@ -81,7 +88,16 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 				if ok && match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
 					entry, parseErr := fs.parser.Parse(line, service)
 					if parseErr == nil && passesSince(entry, sinceTime) {
-						results = append(results, entry)
+						if fs.config.Limit <= 0 {
+							results = append(results, entry)
+						} else {
+							if h.Len() < fs.config.Limit {
+								heap.Push(&h, entry)
+							} else if entry.Timestamp.After(h[0].Timestamp) {
+								heap.Pop(&h)
+								heap.Push(&h, entry)
+							}
+						}
 					}
 				}
 			}
@@ -90,9 +106,17 @@ func (fs *FileScanner) Scan() ([]domain.LogEntry, error) {
 				break
 			}
 		}
-		fs.offsets[path] = offset // save offset after historical read
+
+		fs.offsets[path] = offset
 		return nil
 	})
+
+	if fs.config.Limit > 0 {
+		results = make([]domain.LogEntry, 0, h.Len())
+		for h.Len() > 0 {
+			results = append(results, heap.Pop(&h).(domain.LogEntry))
+		}
+	}
 
 	return results, err
 }
