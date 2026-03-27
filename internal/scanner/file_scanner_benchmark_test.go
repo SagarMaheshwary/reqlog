@@ -78,17 +78,19 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p, _ := parser.NewParser(parser.TypeText)
 
-		scn := NewFileScanner(ScanConfig{
+		fs := NewFileScanner(ScanConfig{
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
 			Keys:        parser.DefaultKeys,
 			Since:       "",
 		}, p)
-		entries, err := scn.Scan()
+		files, err := fs.ListLogFiles()
 		if err != nil {
-			b.Fatalf("scan failed: %v", err)
+			b.Fatal(err)
 		}
+		entries := fs.Scan(files)
+
 		if len(entries) == 0 {
 			b.Fatalf("expected matches, got none")
 		}
@@ -104,17 +106,19 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p, _ := parser.NewParser(parser.TypeJSON)
 
-		scn := NewFileScanner(ScanConfig{
+		fs := NewFileScanner(ScanConfig{
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,
 			Keys:        parser.DefaultKeys,
 			Since:       "",
 		}, p)
-		entries, err := scn.Scan()
+		files, err := fs.ListLogFiles()
 		if err != nil {
-			b.Fatalf("scan failed: %v", err)
+			b.Fatal(err)
 		}
+		entries := fs.Scan(files)
+
 		if len(entries) == 0 {
 			b.Fatalf("expected matches, got none")
 		}

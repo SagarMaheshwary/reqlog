@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/parser"
@@ -21,6 +22,8 @@ func main() {
 		follow     bool
 		key        string
 		since      string
+		recursive  bool
+		service    string
 	)
 
 	flag.StringVar(&dir, "dir", "./logs", "log directory")
@@ -30,6 +33,8 @@ func main() {
 	flag.BoolVar(&follow, "follow", false, "follow logs (tail)")
 	flag.StringVar(&key, "key", "", "request id key (e.g request_id, trace_id)")
 	flag.StringVar(&since, "since", "", "filter logs (e.g 5m, 1h)")
+	flag.BoolVar(&recursive, "recursive", true, "")
+	flag.StringVar(&service, "service", "", "filter by service name")
 
 	flag.Parse()
 
@@ -61,6 +66,12 @@ Examples:
 	if key != "" {
 		keys = []string{key}
 	}
+
+	services := []string{}
+	if service != "" {
+		services = strings.Split(service, ",")
+	}
+
 	cfg := scanner.ScanConfig{
 		Dir:         dir,
 		SearchValue: SearchValue,
@@ -68,13 +79,17 @@ Examples:
 		Keys:        keys,
 		Since:       since,
 		Limit:       limit,
+		Recursive:   recursive,
+		Services:    services,
 	}
 	scn := scanner.NewFileScanner(cfg, p)
 
-	entries, err := scn.Scan()
+	files, err := scn.ListLogFiles()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	entries := scn.Scan(files)
 
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Timestamp.Before(entries[j].Timestamp)
@@ -86,6 +101,6 @@ Examples:
 	}
 
 	if follow {
-		scn.Follow()
+		scn.Follow(files)
 	}
 }

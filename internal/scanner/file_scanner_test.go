@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"container/heap"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,11 +34,11 @@ func TestFileScanner_Scan(t *testing.T) {
 	}
 
 	fs := NewFileScanner(cfg, parser.TextParser{})
-
-	results, err := fs.Scan()
+	files, err := fs.ListLogFiles()
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
+	results := fs.Scan(files)
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
@@ -73,11 +75,11 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 	}
 
 	fs := NewFileScanner(cfg, parser.TextParser{})
-
-	results, err := fs.Scan()
+	files, err := fs.ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
+	results := fs.Scan(files)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -102,11 +104,11 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	}
 
 	fs := NewFileScanner(cfg, parser.TextParser{})
-
-	results, err := fs.Scan()
+	files, err := fs.ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
+	results := fs.Scan(files)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -126,14 +128,95 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	}
 
 	fs := NewFileScanner(cfg, parser.TextParser{})
+	files, err := fs.ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := fs.Scan(files)
 
-	results, err := fs.Scan()
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestScan_MultiFile_GlobalLimit(t *testing.T) {
+	dir := t.TempDir()
+
+	file1 := filepath.Join(dir, "a.log")
+	file2 := filepath.Join(dir, "b.log")
+
+	os.WriteFile(file1, []byte("id=123\nid=123\n"), 0644)
+	os.WriteFile(file2, []byte("id=123\nid=123\n"), 0644)
+
+	fs := NewFileScanner(ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"id"},
+		Limit:       2,
+	}, mockParser{extractOK: true})
+
+	results := fs.Scan([]string{file1, file2})
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+}
+
+func TestScan_SkipsFileErrors(t *testing.T) {
+	dir := t.TempDir()
+
+	valid := filepath.Join(dir, "valid.log")
+	invalid := filepath.Join(dir, "missing.log")
+
+	os.WriteFile(valid, []byte("id=123\n"), 0644)
+
+	fs := NewFileScanner(ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"id"},
+	}, mockParser{extractOK: true})
+
+	results := fs.Scan([]string{valid, invalid})
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+}
+
+func TestScan_NoTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+
+	file := filepath.Join(dir, "a.log")
+	os.WriteFile(file, []byte("id=123"), 0644) // no newline
+
+	fs := NewFileScanner(ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"id"},
+	}, mockParser{extractOK: true})
+
+	results := fs.Scan([]string{file})
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+}
+
+func TestListLogFiles_FilterByService(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, "auth.log"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "db.log"), []byte(""), 0644)
+
+	fs := NewFileScanner(ScanConfig{
+		Dir:      dir,
+		Services: []string{"auth"},
+	}, mockParser{})
+
+	files, err := fs.ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(results) != 0 {
-		t.Fatalf("expected 0 results, got %d", len(results))
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
 	}
 }
 
@@ -178,7 +261,7 @@ func TestPassesSince(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := domain.LogEntry{Timestamp: tt.entryTime}
-			result := passesSince(entry, tt.since)
+			result := passesSince(&entry, tt.since)
 
 			if result != tt.expected {
 				t.Fatalf("expected %v, got %v", tt.expected, result)
@@ -342,6 +425,127 @@ func TestContainsFoldASCII(t *testing.T) {
 			result := containsFoldASCII(tt.s, tt.substr)
 			if result != tt.expected {
 				t.Fatalf("expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestProcessLine(t *testing.T) {
+	tests := []struct {
+		name        string
+		line        string
+		search      string
+		ignoreCase  bool
+		extractOK   bool
+		parseErr    error
+		expectMatch bool
+	}{
+		{
+			name:        "match success",
+			line:        "id=123 hello",
+			search:      "123",
+			extractOK:   true,
+			expectMatch: true,
+		},
+		{
+			name:        "no contains match",
+			line:        "hello world",
+			search:      "123",
+			extractOK:   true,
+			expectMatch: false,
+		},
+		{
+			name:        "extract fails",
+			line:        "id=123",
+			search:      "123",
+			extractOK:   false,
+			expectMatch: false,
+		},
+		{
+			name:        "parse fails",
+			line:        "id=123",
+			search:      "123",
+			extractOK:   true,
+			parseErr:    errors.New("parse error"),
+			expectMatch: false,
+		},
+		{
+			name:        "ignore case match",
+			line:        "ID=123",
+			search:      "123",
+			ignoreCase:  true,
+			extractOK:   true,
+			expectMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := NewFileScanner(ScanConfig{
+				SearchValue: tt.search,
+				IgnoreCase:  tt.ignoreCase,
+				Keys:        []string{"id"},
+			}, mockParser{
+				extractOK: tt.extractOK,
+				parseErr:  tt.parseErr,
+			})
+
+			_, ok := fs.processLine(tt.line, "svc")
+
+			if ok != tt.expectMatch {
+				t.Fatalf("expected %v, got %v", tt.expectMatch, ok)
+			}
+		})
+	}
+}
+func TestAddEntry(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name     string
+		limit    int
+		input    []time.Duration
+		expected int
+	}{
+		{
+			name:     "no limit",
+			limit:    0,
+			input:    []time.Duration{1, 2, 3},
+			expected: 3,
+		},
+		{
+			name:     "limit enforced",
+			limit:    2,
+			input:    []time.Duration{1, 2, 3},
+			expected: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := NewFileScanner(ScanConfig{Limit: tt.limit}, mockParser{})
+			var results []domain.LogEntry
+			var h entryHeap
+
+			if tt.limit > 0 {
+				heap.Init(&h)
+			}
+
+			for _, d := range tt.input {
+				entry := domain.LogEntry{
+					Timestamp: now.Add(d * time.Minute),
+				}
+				fs.addEntry(entry, &results, &h)
+			}
+
+			if tt.limit <= 0 {
+				if len(results) != tt.expected {
+					t.Fatalf("expected %d results, got %d", tt.expected, len(results))
+				}
+			} else {
+				if h.Len() != tt.expected {
+					t.Fatalf("expected heap size %d, got %d", tt.expected, h.Len())
+				}
 			}
 		})
 	}
