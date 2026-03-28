@@ -13,47 +13,97 @@ import (
 	"github.com/sagarmaheshwary/reqlog/internal/scanner"
 )
 
+var (
+	dir         = flag.String("dir", "./logs", "directory containing log files")
+	ignoreCase  = flag.Bool("ignore-case", false, "perform case-insensitive search")
+	limit       = flag.Int("limit", 0, "limit number of results (returns newest N matches)")
+	jsonMode    = flag.Bool("json", false, "parse logs as JSON (one JSON object per line)")
+	follow      = flag.Bool("follow", false, "follow logs in real time (like tail -f)")
+	key         = flag.String("key", "", "field key to match (e.g. request_id, trace_id, event_key)")
+	since       = flag.String("since", "", "only include logs newer than duration (e.g. 5m, 1h)")
+	recursive   = flag.Bool("recursive", true, "scan directories recursively")
+	service     = flag.String("service", "", "filter by service name (comma-separated, e.g. order-service,inventory-service)")
+	showVersion = flag.Bool("version", false, "print version and exit")
+)
+
+var version = "dev"
+
+var cliInfo = `Usage:
+  reqlog [flags] <search_value>
+
+Description:
+  Search logs by exact key=value matching across log files.
+
+Examples:
+  # Basic search
+  reqlog abc123
+
+  # Search in a specific directory
+  reqlog --dir ./logs abc123
+
+  # Case-insensitive search
+  reqlog --ignore-case abc123
+
+  # Limit results (latest 10 matches)
+  reqlog --limit 10 abc123
+
+  # Filter by key
+  reqlog --key request_id abc123
+  reqlog --key event_key order.created
+
+  # JSON logs
+  reqlog --json --key trace_id trace-1
+
+  # Filter recent logs
+  reqlog --since 5m abc123
+
+  # Filter specific services
+  reqlog --service order-service,inventory-service abc123
+
+  # Non-recursive scan
+  reqlog --recursive=false abc123
+
+  # Follow logs (tail mode)
+  reqlog --follow abc123
+
+  # Combined example (real-world usage)
+  reqlog \
+    --dir ./logs \
+    --service api-gateway,order-service \
+    --key event_key \
+    --since 10m \
+    --limit 20 \
+    order.created`
+
 func main() {
-	var (
-		dir        string
-		ignoreCase bool
-		limit      int
-		jsonMode   bool
-		follow     bool
-		key        string
-		since      string
-		recursive  bool
-		service    string
-	)
-
-	flag.StringVar(&dir, "dir", "./logs", "log directory")
-	flag.BoolVar(&ignoreCase, "ignore-case", false, "case insensitive search")
-	flag.IntVar(&limit, "limit", 0, "limit output")
-	flag.BoolVar(&jsonMode, "json", false, "parse JSON logs")
-	flag.BoolVar(&follow, "follow", false, "follow logs (tail)")
-	flag.StringVar(&key, "key", "", "request id key (e.g request_id, trace_id)")
-	flag.StringVar(&since, "since", "", "filter logs (e.g 5m, 1h)")
-	flag.BoolVar(&recursive, "recursive", true, "")
-	flag.StringVar(&service, "service", "", "filter by service name")
-
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Printf("reqlog version %s\n", version)
+		return
+	}
+
 	if flag.NArg() < 1 {
-		fmt.Println(`Usage: 
- reqlog [flags] <request_id>
-Examples:
- reqlog abc123
- reqlog -dir ./logs abc123
- reqlog -dir ./logs -json json-abc
- reqlog -dir ./logs -json -key trace_id json-trace-1
- reqlog -dir ./logs -since 5m abc123`)
-		os.Exit(1)
+		if flag.NArg() < 1 {
+			fmt.Println(cliInfo)
+			os.Exit(1)
+		}
 	}
 
 	SearchValue := flag.Arg(0)
 
+	keys := parser.DefaultKeys
+	if *key != "" {
+		keys = []string{*key}
+	}
+
+	services := []string{}
+	if *service != "" {
+		services = strings.Split(*service, ",")
+	}
+
 	var parserType = parser.TypeText
-	if jsonMode {
+	if *jsonMode {
 		parserType = parser.TypeJSON
 	}
 
@@ -62,24 +112,14 @@ Examples:
 		log.Fatal(err)
 	}
 
-	keys := parser.DefaultKeys
-	if key != "" {
-		keys = []string{key}
-	}
-
-	services := []string{}
-	if service != "" {
-		services = strings.Split(service, ",")
-	}
-
 	cfg := scanner.ScanConfig{
-		Dir:         dir,
+		Dir:         *dir,
 		SearchValue: SearchValue,
-		IgnoreCase:  ignoreCase,
+		IgnoreCase:  *ignoreCase,
 		Keys:        keys,
-		Since:       since,
-		Limit:       limit,
-		Recursive:   recursive,
+		Since:       *since,
+		Limit:       *limit,
+		Recursive:   *recursive,
 		Services:    services,
 	}
 	scn := scanner.NewFileScanner(cfg, p)
@@ -100,7 +140,7 @@ Examples:
 		fmt.Println(formatter.Format(e, colorizer))
 	}
 
-	if follow {
+	if *follow {
 		scn.Follow(files)
 	}
 }

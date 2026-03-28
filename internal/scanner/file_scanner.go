@@ -165,8 +165,6 @@ func (fs *FileScanner) Follow(files []string) {
 func (fs *FileScanner) ListLogFiles() ([]string, error) {
 	var files []string
 
-	fmt.Println(fs.config.Services)
-
 	serviceSet := make(map[string]struct{})
 	for _, s := range fs.config.Services {
 		s = strings.TrimSpace(s)
