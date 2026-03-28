@@ -104,7 +104,7 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 }
 
 func (fs *FileScanner) Follow(files []string) {
-	colorizer := formatter.NewColorizer()
+	f := formatter.NewFormatter([]domain.LogEntry{})
 
 	for {
 		for _, path := range files {
@@ -137,7 +137,7 @@ func (fs *FileScanner) Follow(files []string) {
 							continue
 						}
 
-						fmt.Println(formatter.Format(*entry, colorizer))
+						fmt.Println(f.Format(*entry))
 					}
 
 					if err != nil {

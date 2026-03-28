@@ -2,6 +2,8 @@
 
 **Search and trace logs across services or a single file — fast.**
 
+![reqlog demo](./assets/demo.gif)
+
 `reqlog` is a lightweight CLI tool for backend engineers to quickly search logs by key/value (e.g. `request_id`, `trace_id`) across one or many log files.
 
 It works equally well for:

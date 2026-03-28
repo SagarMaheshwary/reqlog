@@ -135,9 +135,9 @@ func main() {
 		return entries[i].Timestamp.Before(entries[j].Timestamp)
 	})
 
-	colorizer := formatter.NewColorizer()
+	f := formatter.NewFormatter(entries)
 	for _, e := range entries {
-		fmt.Println(formatter.Format(e, colorizer))
+		fmt.Println(f.Format(e))
 	}
 
 	if *follow {
