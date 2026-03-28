@@ -193,7 +193,7 @@ Benchmarks are run on **realistic multi-service logs**:
 | `reqlog --dir ./logs/json --key request_id --json <request-id>`             | JSON with explicit key           | ~2.22s  | ~9 MB  |
 | `reqlog --dir ./logs/json --limit 100 --key event_key --json order.created` | High-frequency + limit           | ~11.53s | ~9 MB  |
 
-## Notes on Performance
+### Notes on Performance
 
 - **Real-world dataset:** Logs are generated from actual service patterns (`order-service`, `inventory-service`), making results representative of real debugging scenarios.
 
@@ -223,7 +223,7 @@ Benchmarks are run on **realistic multi-service logs**:
 - **Single-threaded (current design):**
   v1 processes logs sequentially. Parallelism may improve performance in future versions.
 
-## Reproducing Benchmarks
+### Reproducing Benchmarks
 
 You can generate similar datasets using:
 
