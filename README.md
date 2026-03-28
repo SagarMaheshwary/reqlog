@@ -43,9 +43,25 @@ Debugging logs often means:
 
 ## Installation
 
+### Go install (recommended)
+
 ```bash
 go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
 ```
+
+### Linux
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
+```
+
+### Windows
+
+Download the latest release from GitHub:
+
+https://github.com/sagarmaheshwary/reqlog/releases
+
+Unzip and add to PATH.
 
 ## Usage
 
