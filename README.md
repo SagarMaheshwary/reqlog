@@ -43,7 +43,7 @@ Debugging logs often means:
 
 ## Installation
 
-### Go install (recommended)
+### Go install
 
 ```bash
 go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
