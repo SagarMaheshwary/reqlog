@@ -120,6 +120,20 @@ Show logs from the last duration:
 reqlog --since 10m --key request_id abc123
 ```
 
+Supported duration formats:
+
+- `30s` → last 30 seconds
+- `5m` → last 5 minutes
+- `1h` → last 1 hour
+- `2h` → last 2 hours
+
+You can also combine units:
+
+- `1h30m` → last 1 hour 30 minutes
+- `2m10s` → last 2 minutes 10 seconds
+
+> Uses Go-style duration format.
+
 ### Limit Results
 
 Return only the newest N matches:

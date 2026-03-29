@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -79,7 +80,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("reqlog version %s\n", version)
+		fmt.Printf("reqlog version %s\n", Version())
 		return
 	}
 
@@ -143,4 +144,21 @@ func main() {
 	if *follow {
 		scn.Follow(files)
 	}
+}
+
+func Version() string {
+	if version != "dev" {
+		return version
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	return "dev"
 }
