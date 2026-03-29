@@ -172,6 +172,45 @@ reqlog --recursive=false --dir ./logs abc123
 15:00:03 [inventory-service] | request_id=abc123 checking stock
 ```
 
+## Supported Log Formats
+
+`reqlog` currently supports a limited set of log formats (more will be added over time).
+
+### Text Logs (single-line)
+
+- Timestamp must be at the **start of the line**
+- Timestamp must be in **ISO-8601 string format**
+- Fields should be in `key=value` format
+
+Example:
+
+```text
+2026-03-20T14:00:00Z request_id=abc123 start request
+2026-03-20T14:00:01Z request_id=abc123 calling order service
+```
+
+### JSON Logs (single-line)
+
+- One JSON object per line
+- Timestamp field must be one of:
+  - `time`
+  - `timestamp`
+  - `ts`
+
+- Timestamp value must be in **ISO-8601 string format**
+
+Example:
+
+```json
+{"time":"2026-03-20T14:10:00Z","request_id":"json-abc","message":"start request"}
+{"time":"2026-03-20T14:10:01Z","request_id":"json-abc","message":"calling order service"}
+```
+
+### Notes
+
+- Logs with **numeric timestamps (e.g. Unix epoch)** are not supported in v1
+- Multi-line / pretty logs are not supported yet
+
 ## Performance
 
 ### Benchmark Environment
