@@ -220,6 +220,26 @@ func TestListLogFiles_FilterByService(t *testing.T) {
 	}
 }
 
+func TestListLogFiles_RecursiveService(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "svc.log"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(dir, "svc-1.log"), []byte(""), 0644)
+
+	fs := NewFileScanner(ScanConfig{
+		Dir:      dir,
+		Services: []string{"svc*"},
+	}, mockParser{})
+
+	files, err := fs.ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+}
+
 func TestMatch(t *testing.T) {
 	tests := []struct {
 		name       string
