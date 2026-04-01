@@ -163,36 +163,56 @@ func (fs *FileScanner) Follow(files []string) {
 }
 
 func (fs *FileScanner) ListLogFiles() ([]string, error) {
-	var files []string
+	exact := map[string]struct{}{}
+	prefixes := []string{}
 
-	serviceSet := make(map[string]struct{})
 	for _, s := range fs.config.Services {
 		s = strings.TrimSpace(s)
-		if s != "" {
-			serviceSet[s] = struct{}{}
+		if s == "" {
+			continue
+		}
+
+		if strings.HasSuffix(s, "*") {
+			prefixes = append(prefixes, strings.TrimRight(s, "*"))
+		} else {
+			exact[s] = struct{}{}
 		}
 	}
 
 	matchesService := func(name string) bool {
-		if len(serviceSet) == 0 {
+		if len(exact) == 0 && len(prefixes) == 0 {
 			return true
 		}
-		service := strings.TrimSuffix(name, ".log")
-		_, ok := serviceSet[service]
-		return ok
+
+		name = strings.TrimSuffix(name, ".log")
+
+		if _, ok := exact[name]; ok {
+			return true
+		}
+
+		for _, p := range prefixes {
+			if strings.HasPrefix(name, p) {
+				return true
+			}
+		}
+		return false
 	}
 
 	if fs.config.Recursive {
+		files := make([]string, 0, 16)
+
 		err := filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info == nil || info.IsDir() {
 				return nil
 			}
 
-			if !strings.HasSuffix(info.Name(), ".log") {
+			name := info.Name()
+
+			if !strings.HasSuffix(name, ".log") {
 				return nil
 			}
 
-			if !matchesService(info.Name()) {
+			if !matchesService(name) {
 				return nil
 			}
 
@@ -202,11 +222,12 @@ func (fs *FileScanner) ListLogFiles() ([]string, error) {
 		return files, err
 	}
 
-	// non-recursive
 	entries, err := os.ReadDir(fs.config.Dir)
 	if err != nil {
 		return nil, err
 	}
+
+	files := make([]string, 0, 16)
 
 	for _, entry := range entries {
 		if entry.IsDir() {
