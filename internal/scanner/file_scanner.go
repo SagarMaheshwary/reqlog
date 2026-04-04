@@ -12,7 +12,6 @@ import (
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
-	"github.com/sagarmaheshwary/reqlog/internal/parser"
 )
 
 type ScanConfig struct {
@@ -27,25 +26,24 @@ type ScanConfig struct {
 }
 
 type FileScanner struct {
-	parser  parser.LogParser
-	offsets map[string]int64
-	config  ScanConfig
+	offsets       map[string]int64
+	lineProcessor *LineProcessor
 }
 
-func NewFileScanner(cfg ScanConfig, p parser.LogParser) *FileScanner {
+func NewFileScanner(lp *LineProcessor) *FileScanner {
 	return &FileScanner{
-		parser:  p,
-		offsets: make(map[string]int64),
-		config:  cfg,
+		offsets:       make(map[string]int64),
+		lineProcessor: lp,
 	}
 }
 
 func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 	var h entryHeap
 	var results []domain.LogEntry
-	sinceTime := parseSince(fs.config.Since)
+	cfg := fs.lineProcessor.config
+	sinceTime := parseSince(cfg.Since)
 
-	if fs.config.Limit > 0 {
+	if cfg.Limit > 0 {
 		heap.Init(&h)
 	}
 
@@ -69,9 +67,9 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 				if len(line) > 0 {
 					offset += int64(len(line))
 
-					entry, ok := fs.processLine(line, service)
+					entry, ok := fs.lineProcessor.ProcessLine(line, service)
 					if ok && passesSince(entry, sinceTime) {
-						fs.addEntry(*entry, &results, &h)
+						fs.lineProcessor.AddEntry(*entry, &results, &h)
 					}
 				}
 
@@ -93,7 +91,7 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 		fs.offsets[path] = offset
 	}
 
-	if fs.config.Limit > 0 {
+	if cfg.Limit > 0 {
 		results = make([]domain.LogEntry, 0, h.Len())
 		for h.Len() > 0 {
 			results = append(results, heap.Pop(&h).(domain.LogEntry))
@@ -132,7 +130,7 @@ func (fs *FileScanner) Follow(files []string) {
 					if len(line) > 0 {
 						offset += int64(len(line))
 
-						entry, ok := fs.processLine(line, service)
+						entry, ok := fs.lineProcessor.ProcessLine(line, service)
 						if !ok {
 							continue
 						}
@@ -162,18 +160,19 @@ func (fs *FileScanner) Follow(files []string) {
 	}
 }
 
-func (fs *FileScanner) ListLogFiles() ([]string, error) {
+func (fs *FileScanner) ListSources() ([]string, error) {
+	cfg := fs.lineProcessor.config
 	exact := map[string]struct{}{}
 	prefixes := []string{}
 
-	for _, s := range fs.config.Services {
+	for _, s := range cfg.Services {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
 
 		if strings.HasSuffix(s, "*") {
-			prefixes = append(prefixes, strings.TrimRight(s, "*"))
+			prefixes = append(prefixes, strings.TrimSuffix(s, "*"))
 		} else {
 			exact[s] = struct{}{}
 		}
@@ -198,15 +197,20 @@ func (fs *FileScanner) ListLogFiles() ([]string, error) {
 		return false
 	}
 
-	if fs.config.Recursive {
+	if cfg.Recursive {
 		files := make([]string, 0, 16)
 
-		err := filepath.Walk(fs.config.Dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info == nil || info.IsDir() {
+		err := filepath.WalkDir(cfg.Dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				logFileScanError(path, err)
+				return nil // continue walking
+			}
+
+			if d.IsDir() {
 				return nil
 			}
 
-			name := info.Name()
+			name := d.Name()
 
 			if !strings.HasSuffix(name, ".log") {
 				return nil
@@ -222,7 +226,7 @@ func (fs *FileScanner) ListLogFiles() ([]string, error) {
 		return files, err
 	}
 
-	entries, err := os.ReadDir(fs.config.Dir)
+	entries, err := os.ReadDir(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -244,125 +248,8 @@ func (fs *FileScanner) ListLogFiles() ([]string, error) {
 			continue
 		}
 
-		files = append(files, filepath.Join(fs.config.Dir, name))
+		files = append(files, filepath.Join(cfg.Dir, name))
 	}
 
 	return files, nil
-}
-
-func (fs *FileScanner) processLine(line, service string) (*domain.LogEntry, bool) {
-	// fast pre-filter
-	if fs.config.IgnoreCase {
-		if !containsFoldASCII(line, fs.config.SearchValue) {
-			return nil, false
-		}
-	} else {
-		if !strings.Contains(line, fs.config.SearchValue) {
-			return nil, false
-		}
-	}
-
-	line = strings.TrimRight(line, "\r\n")
-
-	foundID, ok := fs.parser.ExtractField(line, fs.config.Keys)
-	if !ok || !match(foundID, fs.config.SearchValue, fs.config.IgnoreCase) {
-		return nil, false
-	}
-
-	entry, err := fs.parser.Parse(line, service)
-	if err != nil {
-		return nil, false
-	}
-
-	return &entry, true
-}
-
-func (fs *FileScanner) addEntry(
-	entry domain.LogEntry,
-	results *[]domain.LogEntry,
-	h *entryHeap,
-) {
-	if fs.config.Limit <= 0 {
-		*results = append(*results, entry)
-		return
-	}
-
-	if h.Len() < fs.config.Limit {
-		heap.Push(h, entry)
-		return
-	}
-
-	if entry.Timestamp.After((*h)[0].Timestamp) {
-		heap.Pop(h)
-		heap.Push(h, entry)
-	}
-}
-
-func match(foundID, SearchValue string, ignoreCase bool) bool {
-	if ignoreCase {
-		return strings.EqualFold(foundID, SearchValue)
-	}
-	return foundID == SearchValue
-}
-
-func passesSince(entry *domain.LogEntry, sinceTime time.Time) bool {
-	if sinceTime.IsZero() {
-		return true
-	}
-	return !entry.Timestamp.Before(sinceTime)
-}
-
-func parseSince(s string) time.Time {
-	if s == "" {
-		return time.Time{}
-	}
-
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return time.Time{}
-	}
-
-	return time.Now().Add(-d)
-}
-
-func asciiLower(b byte) byte {
-	if b >= 'A' && b <= 'Z' {
-		return b + ('a' - 'A')
-	}
-	return b
-}
-
-func containsFoldASCII(s, substr string) bool {
-	n := len(substr)
-	if n == 0 {
-		return true
-	}
-	if n > len(s) {
-		return false
-	}
-
-	first := asciiLower(substr[0])
-
-	for i := 0; i <= len(s)-n; i++ {
-		if asciiLower(s[i]) != first {
-			continue
-		}
-
-		ok := true
-		for j := 1; j < n; j++ {
-			if asciiLower(s[i+j]) != asciiLower(substr[j]) {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-func logFileScanError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "error scanning %s: %v\n", path, err)
 }

@@ -1,16 +1,27 @@
 package scanner
 
 import (
-	"container/heap"
-	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
-	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/parser"
 )
+
+func newTestFileScanner(cfg *ScanConfig, p parser.LogParser) *FileScanner {
+	lp := NewLineProcessor(cfg, p)
+	return NewFileScanner(lp)
+}
+
+func writeFile(t *testing.T, path string, content []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+}
 
 func TestFileScanner_Scan(t *testing.T) {
 	dir := t.TempDir()
@@ -19,22 +30,18 @@ func TestFileScanner_Scan(t *testing.T) {
 2024-03-10T12:01:00Z user=456 status=fail
 2024-03-10T12:02:00Z user=123 status=ok
 `
+	writeFile(t, filepath.Join(dir, "auth.log"), []byte(logContent))
 
-	filePath := filepath.Join(dir, "auth.log")
-	err := os.WriteFile(filePath, []byte(logContent), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := ScanConfig{
+	cfg := &ScanConfig{
 		Dir:         dir,
 		SearchValue: "123",
 		IgnoreCase:  false,
 		Keys:        []string{"user"},
 	}
+	lp := NewLineProcessor(cfg, &parser.TextParser{})
+	fs := NewFileScanner(lp)
 
-	fs := NewFileScanner(cfg, parser.TextParser{})
-	files, err := fs.ListLogFiles()
+	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,21 +68,18 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 
 	logContent := oldTime + " user=123 status=ok\n" +
 		newTime + " user=123 status=ok\n"
+	writeFile(t, filepath.Join(dir, "svc.log"), []byte(logContent))
 
-	filePath := filepath.Join(dir, "svc.log")
-	if err := os.WriteFile(filePath, []byte(logContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := ScanConfig{
+	cfg := &ScanConfig{
 		Dir:         dir,
 		SearchValue: "123",
 		Keys:        []string{"user"},
 		Since:       "5m", // should only include recent one
 	}
+	lp := NewLineProcessor(cfg, parser.TextParser{})
 
-	fs := NewFileScanner(cfg, parser.TextParser{})
-	files, err := fs.ListLogFiles()
+	fs := NewFileScanner(lp)
+	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,21 +94,18 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	dir := t.TempDir()
 
 	logContent := `2024-03-10T12:00:00Z user=ABC status=ok`
+	writeFile(t, filepath.Join(dir, "svc.log"), []byte(logContent))
 
-	filePath := filepath.Join(dir, "svc.log")
-	if err := os.WriteFile(filePath, []byte(logContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := ScanConfig{
+	cfg := &ScanConfig{
 		Dir:         dir,
 		SearchValue: "abc",
 		Keys:        []string{"user"},
 		IgnoreCase:  true,
 	}
+	lp := NewLineProcessor(cfg, parser.TextParser{})
 
-	fs := NewFileScanner(cfg, parser.TextParser{})
-	files, err := fs.ListLogFiles()
+	fs := NewFileScanner(lp)
+	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,17 +119,18 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	_ = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("test"), 0644)
-	_ = os.WriteFile(filepath.Join(dir, "app.log"), []byte("invalid line"), 0644)
+	writeFile(t, filepath.Join(dir, "file.txt"), []byte("test"))
+	writeFile(t, filepath.Join(dir, "app.log"), []byte("invalid line"))
 
-	cfg := ScanConfig{
+	cfg := &ScanConfig{
 		Dir:         dir,
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
+	lp := NewLineProcessor(cfg, parser.TextParser{})
 
-	fs := NewFileScanner(cfg, parser.TextParser{})
-	files, err := fs.ListLogFiles()
+	fs := NewFileScanner(lp)
+	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,14 +147,15 @@ func TestScan_MultiFile_GlobalLimit(t *testing.T) {
 	file1 := filepath.Join(dir, "a.log")
 	file2 := filepath.Join(dir, "b.log")
 
-	os.WriteFile(file1, []byte("id=123\nid=123\n"), 0644)
-	os.WriteFile(file2, []byte("id=123\nid=123\n"), 0644)
+	writeFile(t, file1, []byte("id=123\nid=123\n"))
+	writeFile(t, file2, []byte("id=123\nid=123\n"))
 
-	fs := NewFileScanner(ScanConfig{
+	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 		Limit:       2,
-	}, mockParser{extractOK: true})
+	}
+	fs := newTestFileScanner(cfg, mockParser{extractOK: true})
 
 	results := fs.Scan([]string{file1, file2})
 
@@ -167,12 +170,13 @@ func TestScan_SkipsFileErrors(t *testing.T) {
 	valid := filepath.Join(dir, "valid.log")
 	invalid := filepath.Join(dir, "missing.log")
 
-	os.WriteFile(valid, []byte("id=123\n"), 0644)
+	writeFile(t, valid, []byte("id=123\n"))
 
-	fs := NewFileScanner(ScanConfig{
+	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"id"},
-	}, mockParser{extractOK: true})
+	}
+	fs := newTestFileScanner(cfg, mockParser{extractOK: true})
 
 	results := fs.Scan([]string{valid, invalid})
 
@@ -185,12 +189,13 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 	dir := t.TempDir()
 
 	file := filepath.Join(dir, "a.log")
-	os.WriteFile(file, []byte("id=123"), 0644) // no newline
+	writeFile(t, file, []byte("id=123")) // no newline
 
-	fs := NewFileScanner(ScanConfig{
+	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"id"},
-	}, mockParser{extractOK: true})
+	}
+	fs := newTestFileScanner(cfg, mockParser{extractOK: true})
 
 	results := fs.Scan([]string{file})
 
@@ -199,373 +204,97 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestListLogFiles_FilterByService(t *testing.T) {
-	dir := t.TempDir()
-
-	os.WriteFile(filepath.Join(dir, "auth.log"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(dir, "db.log"), []byte(""), 0644)
-
-	fs := NewFileScanner(ScanConfig{
-		Dir:      dir,
-		Services: []string{"auth"},
-	}, mockParser{})
-
-	files, err := fs.ListLogFiles()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(files) != 1 {
-		t.Fatalf("expected 1 file, got %d", len(files))
-	}
-}
-
-func TestListLogFiles_RecursiveService(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "svc.log"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(dir, "svc-1.log"), []byte(""), 0644)
-
-	fs := NewFileScanner(ScanConfig{
-		Dir:      dir,
-		Services: []string{"svc*"},
-	}, mockParser{})
-
-	files, err := fs.ListLogFiles()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(files) != 2 {
-		t.Fatalf("expected 2 files, got %d", len(files))
-	}
-}
-
-func TestMatch(t *testing.T) {
-	tests := []struct {
-		name       string
-		found      string
-		search     string
-		ignoreCase bool
-		expected   bool
-	}{
-		{"exact match", "abc", "abc", false, true},
-		{"case mismatch", "ABC", "abc", false, false},
-		{"ignore case match", "ABC", "abc", true, true},
-		{"different values", "abc", "xyz", true, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := match(tt.found, tt.search, tt.ignoreCase)
-			if result != tt.expected {
-				t.Fatalf("expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestPassesSince(t *testing.T) {
-	now := time.Now()
-
+func TestListSources(t *testing.T) {
 	tests := []struct {
 		name      string
-		entryTime time.Time
-		since     time.Time
-		expected  bool
-	}{
-		{"since zero", now, time.Time{}, true},
-		{"after since", now, now.Add(-1 * time.Minute), true},
-		{"before since", now.Add(-10 * time.Minute), now.Add(-1 * time.Minute), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			entry := domain.LogEntry{Timestamp: tt.entryTime}
-			result := passesSince(&entry, tt.since)
-
-			if result != tt.expected {
-				t.Fatalf("expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestParseSince(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  string
-		isZero bool
-	}{
-		{"empty string", "", true},
-		{"invalid duration", "abc", true},
-		{"valid duration", "5m", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseSince(tt.input)
-
-			if tt.isZero && !result.IsZero() {
-				t.Fatal("expected zero time")
-			}
-
-			if !tt.isZero && result.IsZero() {
-				t.Fatal("expected non-zero time")
-			}
-		})
-	}
-}
-
-func TestAsciiLower(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    byte
-		expected byte
-	}{
-		{"uppercase A", 'A', 'a'},
-		{"uppercase Z", 'Z', 'z'},
-		{"lowercase a", 'a', 'a'},
-		{"lowercase z", 'z', 'z'},
-		{"number", '5', '5'},
-		{"symbol", '#', '#'},
-		{"mixed char", 'M', 'm'},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := asciiLower(tt.input)
-			if result != tt.expected {
-				t.Fatalf("expected %q, got %q", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestContainsFoldASCII(t *testing.T) {
-	tests := []struct {
-		name     string
-		s        string
-		substr   string
-		expected bool
+		setup     func(dir string)
+		cfg       *ScanConfig
+		wantFiles func(dir string) []string
 	}{
 		{
-			name:     "exact match",
-			s:        "hello world",
-			substr:   "world",
-			expected: true,
+			name: "skip non-log and subdirectories",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "auth.log"), []byte(""))
+				writeFile(t, filepath.Join(dir, "non-log-file"), []byte(""))
+
+				os.Mkdir(filepath.Join(dir, "sub-dir"), 0755)
+				writeFile(t, filepath.Join(dir, "sub-dir", "svc.log"), []byte(""))
+			},
+			cfg: &ScanConfig{
+				Services: []string{},
+			},
+			wantFiles: func(dir string) []string {
+				return []string{filepath.Join(dir, "auth.log")}
+			},
 		},
 		{
-			name:     "case insensitive match",
-			s:        "Hello World",
-			substr:   "world",
-			expected: true,
+			name: "recursive skip non-log and include subdir logs",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "auth.log"), []byte(""))
+				writeFile(t, filepath.Join(dir, "non-log-file"), []byte(""))
+
+				os.Mkdir(filepath.Join(dir, "sub-dir"), 0755)
+				writeFile(t, filepath.Join(dir, "sub-dir", "svc.log"), []byte(""))
+				writeFile(t, filepath.Join(dir, "sub-dir", "non-log-file"), []byte(""))
+			},
+			cfg: &ScanConfig{
+				Services:  []string{"svc"},
+				Recursive: true,
+			},
+			wantFiles: func(dir string) []string {
+				return []string{filepath.Join(dir, "sub-dir/svc.log")}
+			},
 		},
 		{
-			name:     "case insensitive reverse",
-			s:        "hello world",
-			substr:   "WORLD",
-			expected: true,
+			name: "filter by service",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "auth.log"), []byte(""))
+				writeFile(t, filepath.Join(dir, "db.log"), []byte(""))
+			},
+			cfg: &ScanConfig{
+				Services: []string{"auth", " "}, //skip empty strings
+			},
+			wantFiles: func(dir string) []string {
+				return []string{filepath.Join(dir, "auth.log")}
+			},
 		},
 		{
-			name:     "no match",
-			s:        "hello world",
-			substr:   "abc",
-			expected: false,
-		},
-		{
-			name:     "substring at start",
-			s:        "Hello",
-			substr:   "he",
-			expected: true,
-		},
-		{
-			name:     "substring at end",
-			s:        "Hello",
-			substr:   "LO",
-			expected: true,
-		},
-		{
-			name:     "full string match",
-			s:        "Hello",
-			substr:   "hello",
-			expected: true,
-		},
-		{
-			name:     "empty substring",
-			s:        "hello",
-			substr:   "",
-			expected: true,
-		},
-		{
-			name:     "substring longer than string",
-			s:        "hi",
-			substr:   "hello",
-			expected: false,
-		},
-		{
-			name:     "single character match",
-			s:        "abc",
-			substr:   "B",
-			expected: true,
-		},
-		{
-			name:     "single character no match",
-			s:        "abc",
-			substr:   "D",
-			expected: false,
-		},
-		{
-			name:     "repeated pattern",
-			s:        "aaaAAA",
-			substr:   "AaA",
-			expected: true,
-		},
-		{
-			name:     "special characters unchanged",
-			s:        "hello-world",
-			substr:   "WORLD",
-			expected: true,
-		},
-		{
-			name:     "numbers",
-			s:        "abc123",
-			substr:   "123",
-			expected: true,
-		},
-		{
-			name:     "partial overlap no match",
-			s:        "abc",
-			substr:   "ac",
-			expected: false,
+			name: "wildcard service",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "svc.log"), []byte(""))
+				writeFile(t, filepath.Join(dir, "svc-1.log"), []byte(""))
+			},
+			cfg: &ScanConfig{
+				Services:  []string{"svc*"},
+				Recursive: true,
+			},
+			wantFiles: func(dir string) []string {
+				return []string{filepath.Join(dir, "svc.log"), filepath.Join(dir, "svc-1.log")}
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := containsFoldASCII(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Fatalf("expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
+			dir := t.TempDir()
 
-func TestProcessLine(t *testing.T) {
-	tests := []struct {
-		name        string
-		line        string
-		search      string
-		ignoreCase  bool
-		extractOK   bool
-		parseErr    error
-		expectMatch bool
-	}{
-		{
-			name:        "match success",
-			line:        "id=123 hello",
-			search:      "123",
-			extractOK:   true,
-			expectMatch: true,
-		},
-		{
-			name:        "no contains match",
-			line:        "hello world",
-			search:      "123",
-			extractOK:   true,
-			expectMatch: false,
-		},
-		{
-			name:        "extract fails",
-			line:        "id=123",
-			search:      "123",
-			extractOK:   false,
-			expectMatch: false,
-		},
-		{
-			name:        "parse fails",
-			line:        "id=123",
-			search:      "123",
-			extractOK:   true,
-			parseErr:    errors.New("parse error"),
-			expectMatch: false,
-		},
-		{
-			name:        "ignore case match",
-			line:        "ID=123",
-			search:      "123",
-			ignoreCase:  true,
-			extractOK:   true,
-			expectMatch: true,
-		},
-	}
+			tt.setup(dir)
+			tt.cfg.Dir = dir
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fs := NewFileScanner(ScanConfig{
-				SearchValue: tt.search,
-				IgnoreCase:  tt.ignoreCase,
-				Keys:        []string{"id"},
-			}, mockParser{
-				extractOK: tt.extractOK,
-				parseErr:  tt.parseErr,
-			})
+			fs := newTestFileScanner(tt.cfg, mockParser{})
 
-			_, ok := fs.processLine(tt.line, "svc")
-
-			if ok != tt.expectMatch {
-				t.Fatalf("expected %v, got %v", tt.expectMatch, ok)
-			}
-		})
-	}
-}
-func TestAddEntry(t *testing.T) {
-	now := time.Now()
-
-	tests := []struct {
-		name     string
-		limit    int
-		input    []time.Duration
-		expected int
-	}{
-		{
-			name:     "no limit",
-			limit:    0,
-			input:    []time.Duration{1, 2, 3},
-			expected: 3,
-		},
-		{
-			name:     "limit enforced",
-			limit:    2,
-			input:    []time.Duration{1, 2, 3},
-			expected: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fs := NewFileScanner(ScanConfig{Limit: tt.limit}, mockParser{})
-			var results []domain.LogEntry
-			var h entryHeap
-
-			if tt.limit > 0 {
-				heap.Init(&h)
+			files, err := fs.ListSources()
+			if err != nil {
+				t.Fatal(err)
 			}
 
-			for _, d := range tt.input {
-				entry := domain.LogEntry{
-					Timestamp: now.Add(d * time.Minute),
-				}
-				fs.addEntry(entry, &results, &h)
-			}
+			wantFiles := tt.wantFiles(dir)
 
-			if tt.limit <= 0 {
-				if len(results) != tt.expected {
-					t.Fatalf("expected %d results, got %d", tt.expected, len(results))
-				}
-			} else {
-				if h.Len() != tt.expected {
-					t.Fatalf("expected heap size %d, got %d", tt.expected, h.Len())
-				}
+			sort.Strings(files)
+			sort.Strings(wantFiles)
+
+			if !reflect.DeepEqual(files, wantFiles) {
+				t.Fatalf("expected %v, got %v", wantFiles, files)
 			}
 		})
 	}
