@@ -50,7 +50,7 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 	for _, path := range files {
 		file, err := os.Open(path)
 		if err != nil {
-			logFileScanError(path, err)
+			logScanError(path, err)
 			continue
 		}
 
@@ -85,17 +85,14 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 		}()
 
 		if err != nil {
-			logFileScanError(path, err)
+			logScanError(path, err)
 		}
 
 		fs.offsets[path] = offset
 	}
 
 	if cfg.Limit > 0 {
-		results = make([]domain.LogEntry, 0, h.Len())
-		for h.Len() > 0 {
-			results = append(results, heap.Pop(&h).(domain.LogEntry))
-		}
+		results = drainHeap(&h)
 	}
 
 	return results
@@ -108,7 +105,7 @@ func (fs *FileScanner) Follow(files []string) {
 		for _, path := range files {
 			file, err := os.Open(path)
 			if err != nil {
-				logFileScanError(path, err)
+				logScanError(path, err)
 				continue
 			}
 
@@ -150,7 +147,7 @@ func (fs *FileScanner) Follow(files []string) {
 			}()
 
 			if err != nil {
-				logFileScanError(path, err)
+				logScanError(path, err)
 			}
 
 			fs.offsets[path] = offset
@@ -171,8 +168,8 @@ func (fs *FileScanner) ListSources() ([]string, error) {
 			continue
 		}
 
-		if strings.HasSuffix(s, "*") {
-			prefixes = append(prefixes, strings.TrimSuffix(s, "*"))
+		if before, ok := strings.CutSuffix(s, "*"); ok {
+			prefixes = append(prefixes, before)
 		} else {
 			exact[s] = struct{}{}
 		}
@@ -202,7 +199,7 @@ func (fs *FileScanner) ListSources() ([]string, error) {
 
 		err := filepath.WalkDir(cfg.Dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				logFileScanError(path, err)
+				logScanError(path, err)
 				return nil // continue walking
 			}
 
