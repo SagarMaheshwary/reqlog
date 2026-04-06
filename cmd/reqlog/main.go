@@ -141,7 +141,7 @@ func main() {
 	}
 
 	entries := scn.Scan(sources)
-	f := formatter.NewFormatter(entries)
+	f := formatter.NewFormatter(entries, keys)
 
 	printEntries(f, entries)
 

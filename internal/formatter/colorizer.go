@@ -35,9 +35,15 @@ var colors = []string{
 const (
 	reset = "\033[0m"
 	dim   = "\033[2m"
+	bold  = "\033[1m"
 
 	tsColor  = "\033[38;5;245m" // gray
 	msgColor = "\033[38;5;252m" // near white
+
+	red    = "\033[31m"
+	green  = "\033[32m"
+	yellow = "\033[33m"
+	cyan   = "\033[36m"
 )
 
 type Colorizer struct{}
@@ -57,6 +63,26 @@ func (c *Colorizer) Color(service string) string {
 	h ^= h >> 16
 
 	return colors[int(h)%len(colors)]
+}
+
+func (c *Colorizer) Cyan(s string) string {
+	return cyan + s + reset
+}
+
+func (c *Colorizer) Green(s string) string {
+	return green + s + reset
+}
+
+func (c *Colorizer) Red(s string) string {
+	return red + s + reset
+}
+
+func (c *Colorizer) Yellow(s string) string {
+	return yellow + s + reset
+}
+
+func (c *Colorizer) Bold(s string) string {
+	return bold + s + reset
 }
 
 func fnv32a(text string) uint32 {

@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var execCommand = exec.Command
+
 type DockerCLIClient struct{}
 
 func NewDockerCLIClient() *DockerCLIClient {
@@ -26,7 +28,7 @@ func (c *DockerCLIClient) Logs(container string, follow bool, since string) (io.
 
 	args = append(args, container)
 
-	cmd := exec.Command("docker", args...)
+	cmd := execCommand("docker", args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -47,7 +49,7 @@ func (c *DockerCLIClient) Logs(container string, follow bool, since string) (io.
 }
 
 func (c *DockerCLIClient) ListContainers() ([]string, error) {
-	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}")
+	cmd := execCommand("docker", "ps", "--format", "{{.Names}}")
 
 	out, err := cmd.Output()
 	if err != nil {
