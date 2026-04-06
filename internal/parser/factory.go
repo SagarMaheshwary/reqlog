@@ -5,20 +5,16 @@ import "fmt"
 type ParserType string
 
 const (
-	TypeText   ParserType = "text"
-	TypeJSON   ParserType = "json"
-	TypeDocker ParserType = "docker"
+	TypeText ParserType = "text"
+	TypeJSON ParserType = "json"
 )
 
-func NewParser(t ParserType) (LogParser, error) {
+func New(t ParserType) (LogParser, error) {
 	switch t {
 	case TypeText:
 		return TextParser{}, nil
 	case TypeJSON:
 		return JSONParser{}, nil
-	case TypeDocker:
-		// future
-		return nil, fmt.Errorf("docker parser not implemented yet")
 	default:
 		return nil, fmt.Errorf("unknown parser type")
 	}

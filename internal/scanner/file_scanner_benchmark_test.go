@@ -76,16 +76,18 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		p, _ := parser.NewParser(parser.TypeText)
-
-		fs := NewFileScanner(ScanConfig{
+		p, _ := parser.New(parser.TypeText)
+		cfg := &ScanConfig{
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
 			Keys:        parser.DefaultKeys,
 			Since:       "",
-		}, p)
-		files, err := fs.ListLogFiles()
+		}
+		lp := NewLineProcessor(cfg, p)
+
+		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr)
+		files, err := fs.ListSources()
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -104,16 +106,18 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		p, _ := parser.NewParser(parser.TypeJSON)
-
-		fs := NewFileScanner(ScanConfig{
+		p, _ := parser.New(parser.TypeJSON)
+		cfg := &ScanConfig{
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,
 			Keys:        parser.DefaultKeys,
 			Since:       "",
-		}, p)
-		files, err := fs.ListLogFiles()
+		}
+		lp := NewLineProcessor(cfg, p)
+
+		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr)
+		files, err := fs.ListSources()
 		if err != nil {
 			b.Fatal(err)
 		}

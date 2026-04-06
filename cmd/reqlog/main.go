@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/parser"
 	"github.com/sagarmaheshwary/reqlog/internal/scanner"
@@ -24,6 +26,7 @@ var (
 	since       = flag.String("since", "", "only include logs newer than duration (e.g. 5m, 1h)")
 	recursive   = flag.Bool("recursive", true, "scan directories recursively")
 	service     = flag.String("service", "", "filter by service name (comma-separated, e.g. order-service,inventory-service)")
+	source      = flag.String("source", "file", `log source backend: "file", "docker"`)
 	showVersion = flag.Bool("version", false, "print version and exit")
 )
 
@@ -80,7 +83,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("reqlog version %s\n", Version())
+		fmt.Printf("reqlog version %s\n", cliVersion())
 		return
 	}
 
@@ -108,12 +111,12 @@ func main() {
 		parserType = parser.TypeJSON
 	}
 
-	p, err := parser.NewParser(parserType)
+	p, err := parser.New(parserType)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cfg := scanner.ScanConfig{
+	cfg := &scanner.ScanConfig{
 		Dir:         *dir,
 		SearchValue: SearchValue,
 		IgnoreCase:  *ignoreCase,
@@ -123,30 +126,31 @@ func main() {
 		Recursive:   *recursive,
 		Services:    services,
 	}
-	scn := scanner.NewFileScanner(cfg, p)
-
-	files, err := scn.ListLogFiles()
+	scn, err := scanner.New(*source, scanner.NewLineProcessor(cfg, p))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	entries := scn.Scan(files)
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Timestamp.Before(entries[j].Timestamp)
-	})
-
-	f := formatter.NewFormatter(entries)
-	for _, e := range entries {
-		fmt.Println(f.Format(e))
+	sources, err := scn.ListSources()
+	if err != nil {
+		log.Fatal(err)
 	}
 
+	if len(sources) == 0 {
+		log.Fatal("no matching sources found")
+	}
+
+	entries := scn.Scan(sources)
+	f := formatter.NewFormatter(entries, keys)
+
+	printEntries(f, entries)
+
 	if *follow {
-		scn.Follow(files)
+		scn.Follow(context.Background(), sources, f)
 	}
 }
 
-func Version() string {
+func cliVersion() string {
 	if version != "dev" {
 		return version
 	}
@@ -161,4 +165,14 @@ func Version() string {
 	}
 
 	return "dev"
+}
+
+func printEntries(f formatter.LogFormatter, entries []domain.LogEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Timestamp.Before(entries[j].Timestamp)
+	})
+
+	for _, e := range entries {
+		fmt.Println(f.Format(e))
+	}
 }
