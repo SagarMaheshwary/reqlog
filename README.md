@@ -6,12 +6,13 @@
 
 `reqlog` is a lightweight CLI tool for backend engineers to quickly search logs by key/value (e.g. `request_id`, `trace_id`) across one or many log files.
 
-It works equally well for:
-
-- **Microservices** → trace a request across multiple services
-- **Monoliths** → search and filter large single log files
-
 No complex `grep` pipelines. No jumping between files.
+
+## What's New (v0.2.0)
+
+- Docker logs support
+- Wildcard support in `--service` (e.g. `order-service*`)
+- Improved output formatting and alignment
 
 ## Why `reqlog`?
 
@@ -33,7 +34,8 @@ Debugging logs often means:
 - Key-based search (e.g. `--key request_id abc123`)
 - Fast scanning (handles millions of lines efficiently)
 - Supports **plain text** and **JSON** logs (single-line)
-- Filter by specific services (`--service`, based on log file names)
+- Docker logs support (`--source docker`)
+- Filter by specific services (`--service`, supports wildcards like `order-service*`)
 - Recursive or non-recursive directory scanning
 - Colored output by service
 - Time filtering (`--since`)
@@ -101,15 +103,37 @@ Parse logs as JSON (one object per line):
 reqlog --dir ./logs --json --key trace_id trace-123
 ```
 
+### Docker Logs
+
+Search logs from Docker containers:
+
+```bash
+reqlog --source docker --service api-gateway abc123
+```
+
+You can also filter containers using wildcards:
+
+```bash
+reqlog --source docker --service order-service* abc123
+```
+
+> Uses container names as service identifiers.
+
 ### Filter by Service
 
-Search only specific services (based on log file names, e.g. `order-service.log`):
+Search only specific services (based on log file names or container names):
 
 ```bash
 reqlog \
   --service api-gateway,order-service \
   --key request_id \
   abc123
+```
+
+Supports wildcard patterns:
+
+```bash
+reqlog --service order-service* abc123
 ```
 
 ### Time Filtering
@@ -167,9 +191,9 @@ reqlog --recursive=false --dir ./logs abc123
 ### Example Output
 
 ```text
-15:00:01 [api-gateway] | request_id=abc123 calling order service
-15:00:02 [order-service] | request_id=abc123 fetching order
-15:00:03 [inventory-service] | request_id=abc123 checking stock
+15:00:01 [api-gateway]       | calling order service level=info request_id=abc123
+15:00:02 [order-service]     | fetching order level=info request_id=abc123
+15:00:03 [inventory-service] | checking stock level=info request_id=abc123
 ```
 
 ## Supported Log Formats
@@ -208,7 +232,7 @@ Example:
 
 ### Notes
 
-- Logs with **numeric timestamps (e.g. Unix epoch)** are not supported in v1
+- Logs with **numeric timestamps (e.g. Unix epoch)** are not supported yet
 - Multi-line / pretty logs are not supported yet
 
 ## Performance
@@ -312,7 +336,7 @@ go run cmd/loggen/main.go --format=[json,text] --orders=2000000
 
 ## Roadmap
 
-- [ ] Docker log support
+- [x] Docker log support
 - [ ] Kubernetes log support
 - [ ] Performance optimizations (parallel scanning)
 - [ ] Support for additional structured log formats
