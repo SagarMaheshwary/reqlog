@@ -86,7 +86,7 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 		}
 		lp := NewLineProcessor(cfg, p)
 
-		fs := NewFileScanner(lp)
+		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr)
 		files, err := fs.ListSources()
 		if err != nil {
 			b.Fatal(err)
@@ -116,7 +116,7 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 		}
 		lp := NewLineProcessor(cfg, p)
 
-		fs := NewFileScanner(lp)
+		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr)
 		files, err := fs.ListSources()
 		if err != nil {
 			b.Fatal(err)

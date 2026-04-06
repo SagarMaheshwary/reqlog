@@ -3,8 +3,11 @@ package scanner
 import (
 	"bufio"
 	"container/heap"
+	"context"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
@@ -13,11 +16,22 @@ import (
 
 type DockerScanner struct {
 	lineProcessor *LineProcessor
-	dockerClient  docker.CLIDockerClient
+	dockerClient  docker.DockerClient
+	out           io.Writer
+	errOut        io.Writer
 }
 
-func NewDockerScanner(lp *LineProcessor, client docker.CLIDockerClient) *DockerScanner {
-	return &DockerScanner{lineProcessor: lp, dockerClient: client}
+func NewDockerScanner(lp *LineProcessor,
+	client docker.DockerClient,
+	out io.Writer,
+	errOut io.Writer,
+) *DockerScanner {
+	return &DockerScanner{
+		lineProcessor: lp,
+		dockerClient:  client,
+		out:           out,
+		errOut:        errOut,
+	}
 }
 
 func (ds *DockerScanner) Scan(containers []string) []domain.LogEntry {
@@ -34,19 +48,22 @@ func (ds *DockerScanner) Scan(containers []string) []domain.LogEntry {
 	for _, container := range containers {
 		reader, err := ds.dockerClient.Logs(container, false, cfg.Since)
 		if err != nil {
-			logScanError(container, err)
+			logScanError(ds.errOut, container, err)
 			continue
 		}
-		defer reader.Close()
 
-		scanner := bufio.NewScanner(reader)
-		for scanner.Scan() {
-			line := scanner.Text()
-			entry, ok := ds.lineProcessor.ProcessLine(line, container)
-			if ok && passesSince(entry, sinceTime) {
-				ds.lineProcessor.AddEntry(*entry, &results, &h)
+		func() {
+			defer reader.Close()
+
+			scanner := bufio.NewScanner(reader)
+			for scanner.Scan() {
+				line := scanner.Text()
+				entry, ok := ds.lineProcessor.ProcessLine(line, container)
+				if ok && passesSince(entry, sinceTime) {
+					ds.lineProcessor.AddEntry(*entry, &results, &h)
+				}
 			}
-		}
+		}()
 	}
 
 	if cfg.Limit > 0 {
@@ -56,16 +73,17 @@ func (ds *DockerScanner) Scan(containers []string) []domain.LogEntry {
 	return results
 }
 
-func (ds *DockerScanner) Follow(containers []string) {
-	f := formatter.NewFormatter([]domain.LogEntry{})
-
-	done := make(chan struct{})
+func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f formatter.LogFormatter) {
+	var wg sync.WaitGroup
 
 	for _, container := range containers {
+		wg.Add(1)
 		go func(container string) {
+			defer wg.Done()
+
 			reader, err := ds.dockerClient.Logs(container, true, "")
 			if err != nil {
-				logScanError(container, err)
+				logScanError(ds.errOut, container, err)
 				return
 			}
 			defer reader.Close()
@@ -74,15 +92,23 @@ func (ds *DockerScanner) Follow(containers []string) {
 			for scanner.Scan() {
 				line := scanner.Text()
 				entry, ok := ds.lineProcessor.ProcessLine(line, container)
-				if !ok {
-					continue
+				if ok {
+					fmt.Fprintln(ds.out, f.Format(*entry))
 				}
-				fmt.Println(f.Format(*entry))
 			}
 		}(container)
 	}
 
-	<-done
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+	case <-done:
+	}
 }
 
 func (ds *DockerScanner) ListSources() ([]string, error) {

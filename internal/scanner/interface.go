@@ -1,18 +1,14 @@
 package scanner
 
 import (
-	"io"
+	"context"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
+	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 )
 
 type Scanner interface {
 	Scan(sources []string) []domain.LogEntry
-	Follow(sources []string)
+	Follow(ctx context.Context, sources []string, f formatter.LogFormatter)
 	ListSources() ([]string, error)
-}
-
-type CLIDockerClient interface {
-	Logs(container string, follow bool, since string) (io.ReadCloser, error)
-	ListContainers() ([]string, error)
 }

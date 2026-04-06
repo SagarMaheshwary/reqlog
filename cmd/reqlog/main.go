@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -139,10 +140,13 @@ func main() {
 		log.Fatal("no matching sources found")
 	}
 
-	printEntries(scn.Scan(sources))
+	entries := scn.Scan(sources)
+	f := formatter.NewFormatter(entries)
+
+	printEntries(f, entries)
 
 	if *follow {
-		scn.Follow(sources)
+		scn.Follow(context.Background(), sources, f)
 	}
 }
 
@@ -163,12 +167,11 @@ func cliVersion() string {
 	return "dev"
 }
 
-func printEntries(entries []domain.LogEntry) {
+func printEntries(f formatter.LogFormatter, entries []domain.LogEntry) {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Timestamp.Before(entries[j].Timestamp)
 	})
 
-	f := formatter.NewFormatter(entries)
 	for _, e := range entries {
 		fmt.Println(f.Format(e))
 	}

@@ -3,7 +3,7 @@ package scanner
 import (
 	"container/heap"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"time"
 
@@ -75,8 +75,8 @@ func containsFoldASCII(s, substr string) bool {
 	return false
 }
 
-func logScanError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "error scanning %s: %v\n", path, err)
+func logScanError(out io.Writer, path string, err error) {
+	fmt.Fprintf(out, "error scanning %s: %v\n", path, err)
 }
 
 func drainHeap(h *entryHeap) []domain.LogEntry {

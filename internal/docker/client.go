@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-type DefaultCLIDockerClient struct{}
+type DockerCLIClient struct{}
 
-func NewCLIDockerClient() *DefaultCLIDockerClient {
-	return &DefaultCLIDockerClient{}
+func NewDockerCLIClient() *DockerCLIClient {
+	return &DockerCLIClient{}
 }
 
-func (c *DefaultCLIDockerClient) Logs(container string, follow bool, since string) (io.ReadCloser, error) {
+func (c *DockerCLIClient) Logs(container string, follow bool, since string) (io.ReadCloser, error) {
 	args := []string{"logs"}
 
 	if follow {
@@ -46,7 +46,7 @@ func (c *DefaultCLIDockerClient) Logs(container string, follow bool, since strin
 	}, nil
 }
 
-func (c *DefaultCLIDockerClient) ListContainers() ([]string, error) {
+func (c *DockerCLIClient) ListContainers() ([]string, error) {
 	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}")
 
 	out, err := cmd.Output()

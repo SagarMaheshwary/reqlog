@@ -3,6 +3,7 @@ package scanner
 import (
 	"bufio"
 	"container/heap"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -26,14 +27,25 @@ type ScanConfig struct {
 }
 
 type FileScanner struct {
-	offsets       map[string]int64
-	lineProcessor *LineProcessor
+	offsets        map[string]int64
+	lineProcessor  *LineProcessor
+	followInterval time.Duration
+	out            io.Writer
+	errOut         io.Writer
 }
 
-func NewFileScanner(lp *LineProcessor) *FileScanner {
+func NewFileScanner(
+	lp *LineProcessor,
+	followInterval time.Duration,
+	out io.Writer,
+	errOut io.Writer,
+) *FileScanner {
 	return &FileScanner{
-		offsets:       make(map[string]int64),
-		lineProcessor: lp,
+		offsets:        make(map[string]int64),
+		lineProcessor:  lp,
+		followInterval: followInterval, // default
+		out:            out,
+		errOut:         errOut,
 	}
 }
 
@@ -50,7 +62,7 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 	for _, path := range files {
 		file, err := os.Open(path)
 		if err != nil {
-			logScanError(path, err)
+			logScanError(fs.errOut, path, err)
 			continue
 		}
 
@@ -85,7 +97,7 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 		}()
 
 		if err != nil {
-			logScanError(path, err)
+			logScanError(fs.errOut, path, err)
 		}
 
 		fs.offsets[path] = offset
@@ -98,63 +110,65 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 	return results
 }
 
-func (fs *FileScanner) Follow(files []string) {
-	f := formatter.NewFormatter([]domain.LogEntry{})
+func (fs *FileScanner) Follow(ctx context.Context, files []string, f formatter.LogFormatter) {
+	ticker := time.NewTicker(fs.followInterval)
+	defer ticker.Stop()
 
 	for {
-		for _, path := range files {
-			file, err := os.Open(path)
-			if err != nil {
-				logScanError(path, err)
-				continue
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			for _, path := range files {
+				fs.processFile(path, f)
 			}
+		}
+	}
+}
 
-			offset, err := func() (int64, error) {
-				defer file.Close()
+func (fs *FileScanner) processFile(path string, f formatter.LogFormatter) {
+	file, err := os.Open(path)
+	if err != nil {
+		logScanError(fs.errOut, path, err)
+		return
+	}
+	defer file.Close()
 
-				service := strings.TrimSuffix(filepath.Base(path), ".log")
+	service := strings.TrimSuffix(filepath.Base(path), ".log")
 
-				offset := fs.offsets[path]
-				_, err := file.Seek(offset, io.SeekStart)
-				if err != nil {
-					return 0, err
-				}
+	offset := fs.offsets[path]
 
-				reader := bufio.NewReader(file)
+	_, err = file.Seek(offset, io.SeekStart)
+	if err != nil {
+		logScanError(fs.errOut, path, err)
+		return
+	}
 
-				for {
-					line, err := reader.ReadString('\n')
-					if len(line) > 0 {
-						offset += int64(len(line))
+	reader := bufio.NewReader(file)
 
-						entry, ok := fs.lineProcessor.ProcessLine(line, service)
-						if !ok {
-							continue
-						}
+	for {
+		line, err := reader.ReadString('\n')
 
-						fmt.Println(f.Format(*entry))
-					}
+		if len(line) > 0 {
+			offset += int64(len(line))
 
-					if err != nil {
-						if err == io.EOF {
-							break
-						}
-						return 0, err
-					}
-				}
-
-				return offset, nil
-			}()
-
-			if err != nil {
-				logScanError(path, err)
+			entry, ok := fs.lineProcessor.ProcessLine(line, service)
+			if ok {
+				fmt.Fprintln(fs.out, f.Format(*entry))
 			}
-
-			fs.offsets[path] = offset
 		}
 
-		time.Sleep(1 * time.Second)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			logScanError(fs.errOut, path, err)
+			return
+		}
 	}
+
+	fs.offsets[path] = offset
 }
 
 func (fs *FileScanner) ListSources() ([]string, error) {
@@ -199,7 +213,7 @@ func (fs *FileScanner) ListSources() ([]string, error) {
 
 		err := filepath.WalkDir(cfg.Dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				logScanError(path, err)
+				logScanError(fs.errOut, path, err)
 				return nil // continue walking
 			}
 

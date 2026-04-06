@@ -1,10 +1,14 @@
 package scanner
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +17,7 @@ import (
 
 func newTestFileScanner(cfg *ScanConfig, p parser.LogParser) *FileScanner {
 	lp := NewLineProcessor(cfg, p)
-	return NewFileScanner(lp)
+	return NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 }
 
 func writeFile(t *testing.T, path string, content []byte) {
@@ -39,7 +43,7 @@ func TestFileScanner_Scan(t *testing.T) {
 		Keys:        []string{"user"},
 	}
 	lp := NewLineProcessor(cfg, &parser.TextParser{})
-	fs := NewFileScanner(lp)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 
 	files, err := fs.ListSources()
 	if err != nil {
@@ -78,7 +82,7 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 	}
 	lp := NewLineProcessor(cfg, parser.TextParser{})
 
-	fs := NewFileScanner(lp)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +108,7 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	}
 	lp := NewLineProcessor(cfg, parser.TextParser{})
 
-	fs := NewFileScanner(lp)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +133,7 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	}
 	lp := NewLineProcessor(cfg, parser.TextParser{})
 
-	fs := NewFileScanner(lp)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
@@ -147,15 +151,15 @@ func TestScan_MultiFile_GlobalLimit(t *testing.T) {
 	file1 := filepath.Join(dir, "a.log")
 	file2 := filepath.Join(dir, "b.log")
 
-	writeFile(t, file1, []byte("id=123\nid=123\n"))
-	writeFile(t, file2, []byte("id=123\nid=123\n"))
+	writeFile(t, file1, []byte("2024-03-10T12:00:00Z id=123\nid=123\n"))
+	writeFile(t, file2, []byte("2024-03-10T12:00:00Z id=123\nid=123\n"))
 
 	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 		Limit:       2,
 	}
-	fs := newTestFileScanner(cfg, mockParser{extractOK: true})
+	fs := newTestFileScanner(cfg, parser.TextParser{})
 
 	results := fs.Scan([]string{file1, file2})
 
@@ -170,13 +174,13 @@ func TestScan_SkipsFileErrors(t *testing.T) {
 	valid := filepath.Join(dir, "valid.log")
 	invalid := filepath.Join(dir, "missing.log")
 
-	writeFile(t, valid, []byte("id=123\n"))
+	writeFile(t, valid, []byte("2024-03-10T12:00:00Z id=123\n"))
 
 	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 	}
-	fs := newTestFileScanner(cfg, mockParser{extractOK: true})
+	fs := newTestFileScanner(cfg, parser.TextParser{})
 
 	results := fs.Scan([]string{valid, invalid})
 
@@ -189,18 +193,98 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 	dir := t.TempDir()
 
 	file := filepath.Join(dir, "a.log")
-	writeFile(t, file, []byte("id=123")) // no newline
+	writeFile(t, file, []byte("2024-03-10T12:00:00Z id=123")) // no newline
 
 	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 	}
-	fs := newTestFileScanner(cfg, mockParser{extractOK: true})
+	fs := newTestFileScanner(cfg, parser.TextParser{})
 
 	results := fs.Scan([]string{file})
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+}
+
+func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
+	cfg := &ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+	}
+	lp := NewLineProcessor(cfg, parser.TextParser{})
+
+	// pass a missing file to trigger error
+	files := []string{"/tmp/nonexistent.log"}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	fs := NewFileScanner(lp, time.Second, &out, &errOut)
+
+	results := fs.Scan(files)
+
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+
+	if !strings.Contains(errOut.String(), "/tmp/nonexistent.log") {
+		t.Errorf("expected error log, got %q", errOut.String())
+	}
+}
+
+func TestFileScanner_Scan_JSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		logLines    []string
+		expectedLen int
+	}{
+		{
+			name: "valid json logs",
+			logLines: []string{
+				`{"time":"2024-03-10T12:00:00Z","user":"123","status":"ok"}`,
+				`{"time":"2024-03-10T12:00:00Z","user":"456","status":"fail"}`,
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "invalid json lines are skipped",
+			logLines: []string{
+				`{"time":"2024-03-10T12:00:00Z","user":"123"}`,
+				`invalid json`,
+				`{"time":"2024-03-10T12:00:00Z","user":"123"}`,
+			},
+			expectedLen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			content := strings.Join(tt.logLines, "\n")
+			writeFile(t, filepath.Join(dir, "svc.log"), []byte(content))
+
+			cfg := &ScanConfig{
+				Dir:         dir,
+				SearchValue: "123",
+				Keys:        []string{"user"},
+			}
+
+			lp := NewLineProcessor(cfg, parser.JSONParser{})
+			fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+
+			files, err := fs.ListSources()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			results := fs.Scan(files)
+
+			if len(results) != tt.expectedLen {
+				t.Fatalf("expected %d results, got %d", tt.expectedLen, len(results))
+			}
+		})
 	}
 }
 
@@ -297,5 +381,121 @@ func TestListSources(t *testing.T) {
 				t.Fatalf("expected %v, got %v", wantFiles, files)
 			}
 		})
+	}
+}
+
+func TestFileScanner_Follow(t *testing.T) {
+	dir := t.TempDir()
+
+	tests := []struct {
+		name   string
+		files  map[string]string
+		want   []string
+		append func() // optional append after first read
+	}{
+		{
+			name: "single file logs",
+			files: map[string]string{
+				"auth.log": "2024-03-10T12:00:00Z user=123 status=ok\n",
+			},
+			want: []string{"2024-03-10T12:00:00Z [auth] user=123 status=ok"},
+		},
+		{
+			name: "multiple files",
+			files: map[string]string{
+				"auth.log": "2024-03-10T12:00:00Z user=123\n",
+				"db.log":   "2024-03-10T12:00:00Z user=123\n",
+			},
+			want: []string{"2024-03-10T12:00:00Z [auth] user=123", "2024-03-10T12:00:00Z [db] user=123"},
+		},
+		{
+			name: "ignore lines that don't match search",
+			files: map[string]string{
+				"svc.log": "2024-03-10T12:00:00Z user=123\nother=xyz\n",
+			},
+			want: []string{"2024-03-10T12:00:00Z [svc] user=123"},
+		},
+		{
+			name: "new lines appended",
+			files: map[string]string{
+				"append.log": "2024-03-10T12:00:00Z user=123 line1\n",
+			},
+			want: []string{"2024-03-10T12:00:00Z [append] user=123 line1", "2024-03-10T12:00:00Z [append] user=123 line2"},
+			append: func() {
+				fpath := filepath.Join(dir, "append.log")
+				f, _ := os.OpenFile(fpath, os.O_APPEND|os.O_WRONLY, 0644)
+				defer f.Close()
+				f.WriteString("2024-03-10T12:00:00Z user=123 line2\n")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := []string{}
+			for fname, content := range tt.files {
+				path := filepath.Join(dir, fname)
+				writeFile(t, path, []byte(content))
+				files = append(files, path)
+			}
+
+			var out bytes.Buffer
+
+			cfg := &ScanConfig{SearchValue: "123", Keys: []string{"user"}}
+			lp := NewLineProcessor(cfg, parser.TextParser{})
+			fs := NewFileScanner(lp, 10*time.Millisecond, &out, io.Discard)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+
+			// Optionally append new lines after start
+			if tt.append != nil {
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					tt.append()
+				}()
+			}
+
+			fs.Follow(ctx, files, &mockFormatter{})
+
+			lines := strings.FieldsFunc(out.String(), func(r rune) bool { return r == '\n' || r == '\r' })
+
+			sort.Strings(lines)
+			want := append([]string(nil), tt.want...)
+			sort.Strings(want)
+
+			if len(lines) != len(want) {
+				t.Fatalf("expected %v lines, got %v", len(want), len(lines))
+			}
+			for i := range lines {
+				if lines[i] != want[i] {
+					t.Errorf("line %d: expected %q, got %q", i, want[i], lines[i])
+				}
+			}
+		})
+	}
+}
+
+func TestFileScanner_Follow_Errors(t *testing.T) {
+	cfg := &ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+	}
+	lp := NewLineProcessor(cfg, mockParser{extractOK: true})
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	fs := NewFileScanner(lp, 10*time.Millisecond, &out, &errOut)
+
+	// pass a missing file to trigger error
+	files := []string{"/tmp/nonexistent.log"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	fs.Follow(ctx, files, &mockFormatter{})
+
+	if !strings.Contains(errOut.String(), "error scanning /tmp/nonexistent.log") {
+		t.Errorf("expected error log, got %q", errOut.String())
 	}
 }
