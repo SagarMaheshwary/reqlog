@@ -1,69 +1,107 @@
-# `reqlog`
+# reqlog
 
-**Search and trace logs across services or a single file — fast.**
+<p align="center">
+  <b>Search and trace logs across services — fast.</b><br/>
+  Debug distributed systems without grep pipelines or context switching.
+</p>
+
+<p align="center">
+  <a href="https://github.com/sagarmaheshwary/reqlog/releases">
+    <img src="https://img.shields.io/github/v/release/sagarmaheshwary/reqlog" />
+  </a>
+  <a href="https://github.com/sagarmaheshwary/reqlog/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/sagarmaheshwary/reqlog" />
+  </a>
+  <img src="https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-blue" />
+  <img src="https://img.shields.io/badge/go-1.20+-00ADD8?logo=go" />
+</p>
 
 ![reqlog demo](./assets/demo.gif)
 
-`reqlog` is a lightweight CLI tool for backend engineers to quickly search logs by key/value (e.g. `request_id`, `trace_id`) across one or many log files.
-
-No complex `grep` pipelines. No jumping between files.
-
-## What's New (v0.2.0)
-
-- Docker logs support
-- Wildcard support in `--service` (e.g. `order-service*`)
-- Improved output formatting and alignment
-
 ## Why `reqlog`?
 
-Debugging logs often means:
+Debugging logs in microservices usually means:
 
-- Logs scattered across multiple files or services
-- Different formats (plain text, JSON, pretty logs)
-- Slow and error-prone manual searching
+- jumping between multiple files
+- dealing with inconsistent formats
+- writing fragile `grep | awk | sort` pipelines
 
-`reqlog` simplifies this by:
+**`reqlog` fixes this in one command.**
 
-- Searching across multiple files in one command
-- Matching structured key/value fields (not just raw text)
-- Showing a clean, chronological flow of events
-- Coloring output by service for easy scanning
+- Search logs across **multiple services**
+- Match **structured fields** like `request_id`, `trace_id`
+- Get a **chronological flow** of a request
+- Visually scan logs with **service-based colors**
+
+## Quick Start
+
+```bash
+reqlog --dir ./logs --key request_id abc123
+```
+
+Example output:
+
+```shell
+2026-03-20T14:10:00Z [api-gateway]    | start request
+2026-03-20T14:10:01Z [order-service]  | fetching order
+2026-03-20T14:10:02Z [inventory]      | checking stock
+```
+
+Follow a request across services in seconds.
 
 ## Features
 
-- Key-based search (e.g. `--key request_id abc123`)
-- Fast scanning (handles millions of lines efficiently)
-- Supports **plain text** and **JSON** logs (single-line)
-- Docker logs support (`--source docker`)
-- Filter by specific services (`--service`, supports wildcards like `order-service*`)
-- Recursive or non-recursive directory scanning
-- Colored output by service
+- Key-based search (`--key request_id`)
+- Fast scanning (millions of lines)
+- Supports **plain text** + **JSON logs**
+- Docker logs support
+- Filter by service (`--service`, supports wildcards)
 - Time filtering (`--since`)
-- Case-insensitive search (`--ignore-case`)
-- Follow mode for live logs (`--follow`)
-- Custom key support (`request_id`, `trace_id`, `event_key`, etc.)
+- Colored output by service
+- Live tailing (`--follow`)
+- Case-insensitive search
+- Works across multiple files & directories
 
 ## Installation
 
-### Go install
+### Go Install
 
 ```bash
 go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
 ```
 
-### Linux
+### macOS / Linux
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
 ```
 
+✔ Auto-detects OS/arch
+✔ Installs latest version
+✔ Installs to `/usr/local/bin`
+
+Verify:
+
+```bash
+reqlog --version
+```
+
 ### Windows
 
-Download the latest release from GitHub:
+Download from:
 
-https://github.com/sagarmaheshwary/reqlog/releases
+[https://github.com/sagarmaheshwary/reqlog/releases](https://github.com/sagarmaheshwary/reqlog/releases)
 
-Unzip and add to PATH.
+Then:
+
+- unzip
+- add to `PATH`
+
+Verify:
+
+```bash
+reqlog --version
+```
 
 ## Usage
 
@@ -73,22 +111,11 @@ reqlog [flags] <search_value>
 
 ### Basic Search
 
-Search all logs in a directory:
-
 ```bash
 reqlog --dir ./logs abc123
 ```
 
-By default, `reqlog` searches for common request tracing keys:
-
-- `request_id`
-- `req_id`
-- `trace_id`
-- `correlation_id`
-
 ### Key-Based Search (Recommended)
-
-Match structured fields like `request_id`, `trace_id`, or `event_key`:
 
 ```bash
 reqlog --key request_id abc123
@@ -97,40 +124,17 @@ reqlog --key event_key order.created
 
 ### JSON Logs
 
-Parse logs as JSON (one object per line):
-
 ```bash
 reqlog --dir ./logs --json --key trace_id trace-123
 ```
 
 ### Docker Logs
 
-Search logs from Docker containers:
-
 ```bash
 reqlog --source docker --service api-gateway abc123
 ```
 
-You can also filter containers using wildcards:
-
-```bash
-reqlog --source docker --service order-service* abc123
-```
-
-> Uses container names as service identifiers.
-
-### Filter by Service
-
-Search only specific services (based on log file names or container names):
-
-```bash
-reqlog \
-  --service api-gateway,order-service \
-  --key request_id \
-  abc123
-```
-
-Supports wildcard patterns:
+Wildcard support:
 
 ```bash
 reqlog --service order-service* abc123
@@ -138,212 +142,66 @@ reqlog --service order-service* abc123
 
 ### Time Filtering
 
-Show logs from the last duration:
-
 ```bash
 reqlog --since 10m --key request_id abc123
 ```
 
-Supported duration formats:
-
-- `30s` → last 30 seconds
-- `5m` → last 5 minutes
-- `1h` → last 1 hour
-- `2h` → last 2 hours
-
-You can also combine units:
-
-- `1h30m` → last 1 hour 30 minutes
-- `2m10s` → last 2 minutes 10 seconds
-
-> Uses Go-style duration format.
-
-### Limit Results
-
-Return only the newest N matches:
-
-```bash
-reqlog --limit 20 --key event_key order.created
-```
-
-### Case-Insensitive Search
-
-```bash
-reqlog --ignore-case --key event_key ORDER.CREATED
-```
-
 ### Follow Logs (Live)
-
-Stream logs in real time (like `tail -f`):
 
 ```bash
 reqlog --follow --key request_id abc123
 ```
 
-### Non-Recursive Scan
+## Why not just use `grep`?
 
-Disable recursive directory scanning:
+| Problem            | grep      | reqlog      |
+| ------------------ | --------- | ----------- |
+| Multi-file search  | ⚠️ manual | ✅ built-in |
+| Request tracing    | ❌        | ✅          |
+| JSON logs          | ❌        | ✅          |
+| Chronological flow | ❌        | ✅          |
+| Service context    | ❌        | ✅          |
 
-```bash
-reqlog --recursive=false --dir ./logs abc123
-```
-
-### Example Output
-
-```text
-15:00:01 [api-gateway]       | calling order service level=info request_id=abc123
-15:00:02 [order-service]     | fetching order level=info request_id=abc123
-15:00:03 [inventory-service] | checking stock level=info request_id=abc123
-```
-
-## Supported Log Formats
-
-`reqlog` currently supports a limited set of log formats (more will be added over time).
-
-### Text Logs (single-line)
-
-- Timestamp must be at the **start of the line**
-- Timestamp must be in **ISO-8601 string format**
-- Fields should be in `key=value` format
-
-Example:
-
-```text
-2026-03-20T14:00:00Z request_id=abc123 start request
-2026-03-20T14:00:01Z request_id=abc123 calling order service
-```
-
-### JSON Logs (single-line)
-
-- One JSON object per line
-- Timestamp field must be one of:
-  - `time`
-  - `timestamp`
-  - `ts`
-
-- Timestamp value must be in **ISO-8601 string format**
-
-Example:
-
-```json
-{"time":"2026-03-20T14:10:00Z","request_id":"json-abc","message":"start request"}
-{"time":"2026-03-20T14:10:01Z","request_id":"json-abc","message":"calling order service"}
-```
-
-### Notes
-
-- Logs with **numeric timestamps (e.g. Unix epoch)** are not supported yet
-- Multi-line / pretty logs are not supported yet
+`reqlog = grep for distributed systems`
 
 ## Performance
 
-### Benchmark Environment
+- ~9.6M lines scanned in **~2 seconds**
+- ~9 MB memory usage
+- Works efficiently on real-world datasets
 
-- **CPU:** AMD Ryzen Pro 5650U
-- **Disk:** NVMe SSD (Gen3)
-- **Execution:** Local machine (comparable to typical VM / cloud disk performance)
+> Optimized for sequential reads + minimal memory usage
 
-### Dataset
+## Supported Log Formats
 
-Benchmarks are run on **realistic multi-service logs**:
+### Text Logs
 
-**Text Logs**
+- ISO-8601 timestamp at start
+- `key=value` fields
 
-- `order-service.log` (~5.9M lines, ~1GB)
-- `inventory-service.log` (~3.7M lines, ~758MB)
-
-**JSON Logs**
-
-- `order-service.log` (~5.9M lines, ~1.3GB)
-- `inventory-service.log` (~3.7M lines, ~919MB)
-
-> Total: ~9.6M lines across 2 services
-
-### Results
-
-| Command                                                                     | Scenario                         | Time    | Memory |
-| --------------------------------------------------------------------------- | -------------------------------- | ------- | ------ |
-| `reqlog --dir ./logs/text <request-id>`                                     | Plain text (match found)         | ~1.94s  | ~9 MB  |
-| `reqlog --dir ./logs/text does-not-exist`                                   | Plain text (no match, full scan) | ~1.90s  | ~9 MB  |
-| `reqlog --dir ./logs/text --ignore-case <request-id>`                       | Case-insensitive search          | ~2.79s  | ~9 MB  |
-| `reqlog --dir ./logs/json --json <request-id>`                              | JSON logs (match found)          | ~2.53s  | ~9 MB  |
-| `reqlog --dir ./logs/json --key request_id --json <request-id>`             | JSON with explicit key           | ~2.22s  | ~9 MB  |
-| `reqlog --dir ./logs/json --limit 100 --key event_key --json order.created` | High-frequency + limit           | ~11.53s | ~9 MB  |
-
-### Notes on Performance
-
-- **Real-world dataset:** Logs are generated from actual service patterns (`order-service`, `inventory-service`), making results representative of real debugging scenarios.
-
-- **Full scan behavior:**
-  `reqlog` scans all files to reconstruct a **complete cross-service timeline**.
-  Even with `--limit`, it does not early-exit to ensure correctness.
-
-- **Key-based search matters:**
-  Using `--key` avoids heuristic detection and improves performance, especially for JSON logs.
-
-- **High-frequency queries are expensive:**
-  Searching for common fields (e.g. `event_key=order.created`) produces many matches → more heap operations → slower execution.
-
-- **CPU-bound workload:**
-  Performance is dominated by:
-  - string matching
-  - parsing (especially JSON)
-  - in-memory sorting (min-heap)
-
-- **Disk impact:**
-  Sequential reads are used. Gen3 SSD performance is comparable to many:
-  - cloud VM disks (EBS / network SSD)
-  - staging / production servers in typical setups
-
-  Faster disks (Gen4+) may yield modest improvements.
-
-- **Single-threaded (current design):**
-  v1 processes logs sequentially. Parallelism may improve performance in future versions.
-
-### Reproducing Benchmarks
-
-You can generate similar datasets using:
-
-```bash
-go run cmd/loggen/main.go --format=[json,text] --orders=2000000
+```text
+2026-03-20T14:00:00Z request_id=abc123 start request
 ```
 
-> Note: `--orders` controls business events, not raw line count.
-> Each order generates multiple log entries across services.
+### JSON Logs
 
-## Why not just use `grep`?
+- One JSON per line
+- Timestamp fields: `time`, `timestamp`, `ts`
 
-`grep` is great for simple text search, but it falls short when debugging requests across distributed systems.
-
-`reqlog` is designed specifically for this use case:
-
-- **Request-aware search**  
-  Automatically detects and filters by request IDs
-
-- **Multi-service correlation**  
-  Search across multiple log files and reconstruct a single request flow
-
-- **Structured log support**  
-  Works with JSON logs (not just plain text)
-
-- **Timeline view**  
-  Outputs logs in chronological order across services
-
-- **Service-level context**  
-  Colorized output makes it easy to distinguish services at a glance
-
-> Think of `reqlog` as `grep` + context + structure for distributed systems.
+```json
+{ "time": "2026-03-20T14:10:00Z", "request_id": "abc", "message": "start" }
+```
 
 ## Roadmap
 
-- [x] Docker log support
-- [ ] Kubernetes log support
-- [ ] Performance optimizations (parallel scanning)
-- [ ] Support for additional structured log formats
+- [x] Docker support
+- [ ] Kubernetes logs
+- [ ] Parallel scanning
+- [ ] More log formats
 
 ## Contributing
 
-Contributions, issues, and suggestions are welcome!
+Contributions and feedback are welcome!
 
 ## License
 
