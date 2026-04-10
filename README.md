@@ -76,9 +76,9 @@ go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
 curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
 ```
 
-✔ Auto-detects OS/arch
-✔ Installs latest version
-✔ Installs to `/usr/local/bin`
+- Auto-detects OS/arch
+- Installs latest version
+- Installs to `/usr/local/bin`
 
 Verify:
 
@@ -151,6 +151,8 @@ reqlog --since 10m --key request_id abc123
 ```bash
 reqlog --follow --key request_id abc123
 ```
+
+> Full usage guide: [docs/usage.md](./docs/usage.md)
 
 ## Why not just use `grep`?
 
