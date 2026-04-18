@@ -1,8 +1,8 @@
 # reqlog
 
 <p align="center">
-  <b>Search and trace logs across services — fast.</b><br/>
-  Debug distributed systems without grep pipelines or context switching.
+  <b>Search and trace requests across microservices, files, and Docker logs — fast.</b><br/>
+  Debug distributed systems using simple key/value search (e.g. request_id, trace_id) without relying on centralized tracing.
 </p>
 
 <p align="center">
