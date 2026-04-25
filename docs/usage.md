@@ -99,40 +99,44 @@ reqlog --recursive=false --dir ./logs abc123
 
 ## Example Output
 
-```text
-15:00:01 [api-gateway]       | calling order service level=info request_id=abc123
-15:00:02 [order-service]     | fetching order level=info request_id=abc123
-15:00:03 [inventory-service] | checking stock level=info request_id=abc123
+```shell
+2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
+2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
+2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
 ```
 
 ## Supported Log Formats
 
 ### Text Logs
 
-- ISO-8601 timestamp at start
-- key=value format
+- ISO-8601 / RFC3339 timestamps at start
+- Supports timestamps **with or without fractional seconds**
+- Outputs timestamps in **millisecond precision (fixed 3 digits)**
+- `key=value` fields
 
 ```text
 2026-03-20T14:00:00Z request_id=abc123 start request
+2026-03-20T14:00:00.123Z request_id=abc123 processing
 ```
 
 ### JSON Logs
 
 - One JSON per line
-- Timestamp fields:
-  - time
-  - timestamp
-  - ts
+- Timestamp fields: `time`, `timestamp`, `ts`
+- Supports timestamps **with or without fractional seconds**
+- Outputs timestamps in **millisecond precision (fixed 3 digits)**
 
 ```json
 { "time": "2026-03-20T14:10:00Z", "request_id": "abc", "message": "start" }
+{ "time": "2026-03-20T14:10:00.456Z", "request_id": "abc", "message": "processing" }
 ```
+
+> Timestamps are parsed using RFC3339 (nano precision) and normalized to millisecond precision in output.
 
 ## Limitations
 
-- No support for numeric timestamps (epoch)
+- No support for numeric timestamps (epoch) yet
 - No multi-line logs
-- Pretty logs not supported yet
 
 ## Tips
 
