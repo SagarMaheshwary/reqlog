@@ -16,7 +16,7 @@ func (p TextParser) Parse(line string, service string) (domain.LogEntry, error) 
 		return domain.LogEntry{}, fmt.Errorf("invalid log format")
 	}
 
-	ts, err := time.Parse(time.RFC3339, parts[0])
+	ts, err := time.Parse(time.RFC3339Nano, parts[0])
 	if err != nil {
 		return domain.LogEntry{}, err
 	}

@@ -42,8 +42,9 @@ func extractJSONTimestamp(line string) (time.Time, bool) {
 			continue
 		}
 
-		ts, err := time.Parse(time.RFC3339, value.String())
-		if err == nil {
+		str := value.String()
+
+		if ts, err := time.Parse(time.RFC3339Nano, str); err == nil {
 			return ts, true
 		}
 	}
