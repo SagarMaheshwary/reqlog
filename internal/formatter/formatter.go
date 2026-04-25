@@ -5,10 +5,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
+
+var tsFormat = "2006-01-02T15:04:05.000Z07:00"
 
 type Formatter struct {
 	colorizer    *Colorizer
@@ -45,7 +46,7 @@ func (f *Formatter) Format(entry domain.LogEntry) string {
 	return fmt.Sprintf(
 		"%s%s%s%s %s[%s]%s%s | %s%s%s",
 		dim, tsColor,
-		entry.Timestamp.Format(time.RFC3339),
+		entry.Timestamp.Format(tsFormat),
 		reset,
 
 		serviceColor,

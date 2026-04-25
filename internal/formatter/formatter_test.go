@@ -103,7 +103,7 @@ func TestFormat_OutputStructure(t *testing.T) {
 
 	out := f.Format(entry)
 
-	if !strings.Contains(out, ts.Format(time.RFC3339)) {
+	if !strings.Contains(out, ts.Format(tsFormat)) {
 		t.Fatalf("expected timestamp in output")
 	}
 
