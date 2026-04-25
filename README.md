@@ -33,6 +33,8 @@ Debugging logs in microservices usually means:
 - Get a **chronological flow** of a request
 - Visually scan logs with **service-based colors**
 
+> Companion web UI for reqlog: https://github.com/sagarmaheshwary/reqlog-ui
+
 ## Quick Start
 
 ```bash
