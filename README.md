@@ -42,9 +42,9 @@ reqlog --dir ./logs --key request_id abc123
 Example output:
 
 ```shell
-2026-03-20T14:10:00Z [api-gateway]    | start request
-2026-03-20T14:10:01Z [order-service]  | fetching order
-2026-03-20T14:10:02Z [inventory]      | checking stock
+2026-03-20T14:10:00.000Z [api-gateway]    | start request
+2026-03-20T14:10:01.000Z [order-service]  | fetching order
+2026-03-20T14:10:02.000Z [inventory]      | checking stock
 ```
 
 Follow a request across services in seconds.
@@ -178,28 +178,55 @@ reqlog --follow --key request_id abc123
 
 ### Text Logs
 
-- ISO-8601 timestamp at start
+- ISO-8601 / RFC3339 timestamps at start
+- Supports timestamps **with or without fractional seconds**
+- Outputs timestamps in **millisecond precision (fixed 3 digits)**
 - `key=value` fields
 
 ```text
 2026-03-20T14:00:00Z request_id=abc123 start request
+2026-03-20T14:00:00.123Z request_id=abc123 processing
 ```
 
 ### JSON Logs
 
 - One JSON per line
 - Timestamp fields: `time`, `timestamp`, `ts`
+- Supports timestamps **with or without fractional seconds**
+- Outputs timestamps in **millisecond precision (fixed 3 digits)**
 
 ```json
 { "time": "2026-03-20T14:10:00Z", "request_id": "abc", "message": "start" }
+{ "time": "2026-03-20T14:10:00.456Z", "request_id": "abc", "message": "processing" }
 ```
+
+> Timestamps are parsed using RFC3339 (nano precision) and normalized to millisecond precision in output.
 
 ## Roadmap
 
-- [x] Docker support
-- [ ] Kubernetes logs
+### Core Features
+
+- [x] Flexible timestamp parsing (RFC3339 / RFC3339Nano)
+- [x] Text log parsing (key=value)
+- [x] JSON log parsing
+- [x] Wildcard support in `--service` (e.g. order-service\*)
+
+- [ ] Unix timestamp support (logs + `--since`)
+- [ ] Optimize `--limit` (early exit / streaming)
+- [ ] `--context` flag (show surrounding lines)
+- [ ] `--fields` flag for JSON logs
+- [ ] `--output=json` for piping and integrations
+
+### Performance & Scalability
+
 - [ ] Parallel scanning
-- [ ] More log formats
+- [ ] General performance improvements
+
+### Integrations
+
+- [x] File logs
+- [x] Docker logs
+- [ ] Kubernetes logs
 
 ## Contributing
 
