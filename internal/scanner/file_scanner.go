@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,10 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 	var h entryHeap
 	var results []domain.LogEntry
 	cfg := fs.lineProcessor.config
-	sinceTime := parseSince(cfg.Since)
+	sinceTime, err := parseSince(cfg.Since)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if cfg.Limit > 0 {
 		heap.Init(&h)

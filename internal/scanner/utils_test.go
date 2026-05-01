@@ -59,25 +59,29 @@ func TestPassesSince(t *testing.T) {
 
 func TestParseSince(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		isZero bool
+		name      string
+		input     string
+		expectErr bool
 	}{
-		{"empty string", "", true},
-		{"invalid duration", "abc", true},
+		{"empty string", "", false},
+		{"invalid input", "abc", true},
 		{"valid duration", "5m", false},
+		{"valid RFC3339", "2026-04-29T19:44:06Z", false},
+		{"valid date only", "2026-04-29", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseSince(tt.input)
+			result, err := parseSince(tt.input)
 
-			if tt.isZero && !result.IsZero() {
-				t.Fatal("expected zero time")
+			if tt.expectErr && err == nil {
+				t.Fatal("expected error, got nil")
 			}
-
-			if !tt.isZero && result.IsZero() {
-				t.Fatal("expected non-zero time")
+			if !tt.expectErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if err == nil && result.IsZero() && tt.input != "" {
+				t.Fatal("expected non-zero time for valid input")
 			}
 		})
 	}
