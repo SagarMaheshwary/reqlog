@@ -23,7 +23,7 @@ var (
 	jsonMode    = flag.Bool("json", false, "parse logs as JSON (one JSON object per line)")
 	follow      = flag.Bool("follow", false, "follow logs in real time (like tail -f)")
 	key         = flag.String("key", "", "field key to match (e.g. request_id, trace_id, event_key)")
-	since       = flag.String("since", "", "only include logs newer than duration (e.g. 5m, 1h)")
+	since       = flag.String("since", "", "filter logs newer than: duration (5m, 1h), RFC3339 timestamp, or YYYY-MM-DD (UTC)")
 	recursive   = flag.Bool("recursive", true, "scan directories recursively")
 	service     = flag.String("service", "", "filter by service name (comma-separated, e.g. order-service,inventory-service)")
 	source      = flag.String("source", "file", `log source backend: "file", "docker"`)

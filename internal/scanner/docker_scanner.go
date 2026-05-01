@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 
@@ -39,7 +40,10 @@ func (ds *DockerScanner) Scan(containers []string) []domain.LogEntry {
 
 	var h entryHeap
 	var results []domain.LogEntry
-	sinceTime := parseSince(ds.lineProcessor.config.Since)
+	sinceTime, err := parseSince(cfg.Since)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if cfg.Limit > 0 {
 		heap.Init(&h)
