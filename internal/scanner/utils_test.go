@@ -1,11 +1,24 @@
 package scanner
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
+
+func ptr(t time.Time) *time.Time {
+	return &t
+}
+
+func mustParseTime(layout, value string) *time.Time {
+	t, err := time.Parse(layout, value)
+	if err != nil {
+		panic(err)
+	}
+	return &t
+}
 
 func TestMatch(t *testing.T) {
 	tests := []struct {
@@ -58,30 +71,94 @@ func TestPassesSince(t *testing.T) {
 }
 
 func TestParseSince(t *testing.T) {
+	fixedNow := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+
 	tests := []struct {
 		name      string
 		input     string
 		expectErr bool
+		expected  *time.Time
 	}{
-		{"empty string", "", false},
-		{"invalid input", "abc", true},
-		{"valid duration", "5m", false},
-		{"valid RFC3339", "2026-04-29T19:44:06Z", false},
-		{"valid date only", "2026-04-29", false},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: ptr(time.Time{}),
+		},
+		{
+			name:      "invalid input",
+			input:     "abc",
+			expectErr: true,
+		},
+		{
+			name:     "duration 5m",
+			input:    "5m",
+			expected: ptr(fixedNow.Add(-5 * time.Minute)),
+		},
+		{
+			name:     "zero duration",
+			input:    "0s",
+			expected: ptr(fixedNow),
+		},
+		{
+			name:  "RFC3339",
+			input: "2026-04-29T19:44:06Z",
+			expected: mustParseTime(
+				time.RFC3339Nano,
+				"2026-04-29T19:44:06Z",
+			),
+		},
+		{
+			name:  "date only",
+			input: "2026-04-29",
+			expected: mustParseTime(
+				"2006-01-02",
+				"2026-04-29",
+			),
+		},
+		{
+			name:     "unix seconds",
+			input:    "1710943200",
+			expected: ptr(time.Unix(1710943200, 0)),
+		},
+		{
+			name:      "invalid unix length",
+			input:     "171094320000",
+			expectErr: true,
+		},
+		{
+			name:      "invalid duration format",
+			input:     "5minutes",
+			expectErr: true,
+		},
+		{
+			name:      "invalid date format",
+			input:     "29-04-2026",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseSince(tt.input)
+			got, err := parseSince(tt.input, fixedNow)
 
-			if tt.expectErr && err == nil {
-				t.Fatal("expected error, got nil")
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), "invalid --since") {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
 			}
-			if !tt.expectErr && err != nil {
+
+			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if err == nil && result.IsZero() && tt.input != "" {
-				t.Fatal("expected non-zero time for valid input")
+
+			if tt.expected != nil {
+				if !got.Equal(*tt.expected) {
+					t.Fatalf("expected %v, got %v", *tt.expected, got)
+				}
 			}
 		})
 	}

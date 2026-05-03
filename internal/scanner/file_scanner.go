@@ -54,7 +54,7 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 	var h entryHeap
 	var results []domain.LogEntry
 	cfg := fs.lineProcessor.config
-	sinceTime, err := parseSince(cfg.Since)
+	sinceTime, err := parseSince(cfg.Since, time.Now())
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
@@ -39,7 +40,7 @@ func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
 
 	var h entryHeap
 	var results []domain.LogEntry
-	sinceTime, err := parseSince(cfg.Since)
+	sinceTime, err := parseSince(cfg.Since, time.Now())
 	if err != nil {
 		return nil, err
 	}

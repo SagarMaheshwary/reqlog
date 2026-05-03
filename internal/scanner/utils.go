@@ -24,12 +24,12 @@ func passesSince(entry *domain.LogEntry, sinceTime time.Time) bool {
 	return !entry.Timestamp.Before(sinceTime)
 }
 
-func parseSince(s string) (time.Time, error) {
+func parseSince(s string, now time.Time) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil
 	}
 	if d, err := time.ParseDuration(s); err == nil {
-		return time.Now().Add(-d), nil
+		return now.Add(-d), nil
 	}
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 		return t, nil
@@ -37,9 +37,12 @@ func parseSince(s string) (time.Time, error) {
 	if t, err := time.Parse("2006-01-02", s); err == nil {
 		return t, nil
 	}
+	if t, ok := parseUnix(s); ok {
+		return t, nil
+	}
 
 	return time.Time{}, fmt.Errorf(
-		"invalid --since value %q\n\nExamples:\n  --since 10m\n  --since 1h\n  --since 2026-04-29T19:44:06Z\n  --since 2026-04-29",
+		"invalid --since value %q\n\nExamples:\n  --since 10m\n  --since 1h\n  --since 2026-04-29T19:44:06Z\n  --since 2026-04-29\n  --since 1710943200",
 		s,
 	)
 }
