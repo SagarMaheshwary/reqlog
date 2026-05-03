@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +24,7 @@ type ScanConfig struct {
 	Limit       int
 	Recursive   bool
 	Services    []string
+	JSONMode    bool
 }
 
 type FileScanner struct {
@@ -50,13 +50,13 @@ func NewFileScanner(
 	}
 }
 
-func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
+func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 	var h entryHeap
 	var results []domain.LogEntry
 	cfg := fs.lineProcessor.config
 	sinceTime, err := parseSince(cfg.Since)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	if cfg.Limit > 0 {
@@ -111,7 +111,7 @@ func (fs *FileScanner) Scan(files []string) []domain.LogEntry {
 		results = drainHeap(&h)
 	}
 
-	return results
+	return results, nil
 }
 
 func (fs *FileScanner) Follow(ctx context.Context, files []string, f formatter.LogFormatter) {

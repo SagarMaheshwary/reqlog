@@ -14,7 +14,6 @@ import (
 
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
-	"github.com/sagarmaheshwary/reqlog/internal/parser"
 )
 
 var errTest = errors.New("docker error")
@@ -23,8 +22,8 @@ func dockerLogs(lines []string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(strings.Join(lines, "\n")))
 }
 
-func newTestDockerScanner(cfg *ScanConfig, p parser.LogParser, client docker.DockerClient) *DockerScanner {
-	lp := NewLineProcessor(cfg, p)
+func newTestDockerScanner(cfg *ScanConfig, client docker.DockerClient) *DockerScanner {
+	lp := NewLineProcessor(cfg, NewTimeParser())
 	return NewDockerScanner(lp, client, io.Discard, io.Discard)
 }
 
@@ -115,11 +114,14 @@ func TestDockerScanner_Scan(t *testing.T) {
 				listFn: func() ([]string, error) { return tt.containers, nil },
 			}
 
-			lp := NewLineProcessor(tt.cfg, parser.TextParser{})
+			lp := NewLineProcessor(tt.cfg, NewTimeParser())
 			var out, errOut bytes.Buffer
 			ds := NewDockerScanner(lp, mock, &out, &errOut)
 
-			results := ds.Scan(tt.containers)
+			results, err := ds.Scan(tt.containers)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if len(results) != tt.want {
 				fmt.Println(results)
@@ -130,6 +132,22 @@ func TestDockerScanner_Scan(t *testing.T) {
 				t.Errorf("expected error log containing %q, got %q", tt.wantErrLog, errOut.String())
 			}
 		})
+	}
+}
+
+func TestDockerScanner_Scan_InvalidSince(t *testing.T) {
+	cfg := &ScanConfig{
+		SearchValue: "abc",
+		Keys:        []string{"user"},
+		IgnoreCase:  true,
+		Since:       "invalid",
+	}
+
+	ds := newTestDockerScanner(cfg, &mockDockerClient{})
+
+	_, err := ds.Scan([]string{"auth"})
+	if err == nil {
+		t.Fatalf("expected error, got %v", err)
 	}
 }
 
@@ -181,12 +199,15 @@ func TestDockerScanner_Scan_JSON(t *testing.T) {
 			cfg := &ScanConfig{
 				SearchValue: "123",
 				Keys:        []string{"user"},
+				JSONMode:    true,
 			}
 
-			ds := newTestDockerScanner(cfg, parser.JSONParser{}, mock)
+			ds := newTestDockerScanner(cfg, mock)
 
-			results := ds.Scan([]string{tt.container})
-
+			results, err := ds.Scan([]string{tt.container})
+			if err != nil {
+				t.Fatal(err)
+			}
 			if len(results) != tt.expectedLen {
 				t.Fatalf("expected %d results, got %d", tt.expectedLen, len(results))
 			}
@@ -237,7 +258,7 @@ func TestDockerScanner_ListSources(t *testing.T) {
 				Services: tt.services,
 			}
 
-			ds := newTestDockerScanner(cfg, mockParser{}, mock)
+			ds := newTestDockerScanner(cfg, mock)
 
 			got, err := ds.ListSources()
 			if err != nil {
@@ -254,12 +275,26 @@ func TestDockerScanner_ListSources(t *testing.T) {
 	}
 }
 
+func TestDockerScanner_ListSources_Error(t *testing.T) {
+	mock := &mockDockerClient{
+		listFn: func() ([]string, error) {
+			return nil, errors.New("list error")
+		},
+	}
+	ds := newTestDockerScanner(&ScanConfig{}, mock)
+
+	_, err := ds.ListSources()
+	if err == nil {
+		t.Fatalf("expected error, got %v", err)
+	}
+}
+
 func TestDockerScanner_Follow(t *testing.T) {
 	cfg := &ScanConfig{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
-	lp := NewLineProcessor(cfg, parser.TextParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	tests := []struct {
 		name       string
@@ -347,7 +382,7 @@ func TestDockerScanner_Follow_Errors(t *testing.T) {
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
-	lp := NewLineProcessor(cfg, mockParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	client := &mockDockerClient{
 		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {

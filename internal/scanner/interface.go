@@ -8,7 +8,7 @@ import (
 )
 
 type Scanner interface {
-	Scan(sources []string) []domain.LogEntry
+	Scan(sources []string) ([]domain.LogEntry, error)
 	Follow(ctx context.Context, sources []string, f formatter.LogFormatter)
 	ListSources() ([]string, error)
 }

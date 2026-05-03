@@ -12,7 +12,6 @@ import (
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
-	"github.com/sagarmaheshwary/reqlog/internal/parser"
 	"github.com/sagarmaheshwary/reqlog/internal/scanner"
 )
 
@@ -96,7 +95,7 @@ func main() {
 
 	SearchValue := flag.Arg(0)
 
-	keys := parser.DefaultKeys
+	keys := scanner.DefaultKeys
 	if *key != "" {
 		keys = []string{*key}
 	}
@@ -104,16 +103,6 @@ func main() {
 	services := []string{}
 	if *service != "" {
 		services = strings.Split(*service, ",")
-	}
-
-	var parserType = parser.TypeText
-	if *jsonMode {
-		parserType = parser.TypeJSON
-	}
-
-	p, err := parser.New(parserType)
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	cfg := &scanner.ScanConfig{
@@ -125,8 +114,9 @@ func main() {
 		Limit:       *limit,
 		Recursive:   *recursive,
 		Services:    services,
+		JSONMode:    *jsonMode,
 	}
-	scn, err := scanner.New(*source, scanner.NewLineProcessor(cfg, p))
+	scn, err := scanner.New(*source, scanner.NewLineProcessor(cfg, scanner.NewTimeParser()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -140,7 +130,11 @@ func main() {
 		log.Fatal("no matching sources found")
 	}
 
-	entries := scn.Scan(sources)
+	entries, err := scn.Scan(sources)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	f := formatter.NewFormatter(entries, keys)
 
 	printEntries(f, entries)

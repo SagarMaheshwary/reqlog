@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/sagarmaheshwary/reqlog/internal/parser"
 )
 
 func createPlainLogFile(b *testing.B, dir, name string, lines int, matchEvery int) string {
@@ -76,22 +74,25 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		p, _ := parser.New(parser.TypeText)
 		cfg := &ScanConfig{
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
-			Keys:        parser.DefaultKeys,
+			Keys:        DefaultKeys,
 			Since:       "",
+			JSONMode:    false,
 		}
-		lp := NewLineProcessor(cfg, p)
+		lp := NewLineProcessor(cfg, NewTimeParser())
 
 		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr)
 		files, err := fs.ListSources()
 		if err != nil {
 			b.Fatal(err)
 		}
-		entries := fs.Scan(files)
+		entries, err := fs.Scan(files)
+		if err != nil {
+			b.Fatal(err)
+		}
 
 		if len(entries) == 0 {
 			b.Fatalf("expected matches, got none")
@@ -106,22 +107,25 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		p, _ := parser.New(parser.TypeJSON)
 		cfg := &ScanConfig{
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,
-			Keys:        parser.DefaultKeys,
+			Keys:        DefaultKeys,
 			Since:       "",
+			JSONMode:    true,
 		}
-		lp := NewLineProcessor(cfg, p)
+		lp := NewLineProcessor(cfg, NewTimeParser())
 
 		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr)
 		files, err := fs.ListSources()
 		if err != nil {
 			b.Fatal(err)
 		}
-		entries := fs.Scan(files)
+		entries, err := fs.Scan(files)
+		if err != nil {
+			b.Fatal(err)
+		}
 
 		if len(entries) == 0 {
 			b.Fatalf("expected matches, got none")
