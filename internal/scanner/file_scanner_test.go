@@ -47,7 +47,10 @@ func TestFileScanner_Scan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results := fs.Scan(files)
+	results, err := fs.Scan(files)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
@@ -85,7 +88,10 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results := fs.Scan(files)
+	results, err := fs.Scan(files)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -111,7 +117,10 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results := fs.Scan(files)
+	results, err := fs.Scan(files)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -136,7 +145,10 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results := fs.Scan(files)
+	results, err := fs.Scan(files)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 0 {
 		t.Fatalf("expected 0 results, got %d", len(results))
@@ -159,7 +171,10 @@ func TestScan_MultiFile_GlobalLimit(t *testing.T) {
 	}
 	fs := newTestFileScanner(cfg)
 
-	results := fs.Scan([]string{file1, file2})
+	results, err := fs.Scan([]string{file1, file2})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
@@ -180,7 +195,10 @@ func TestScan_SkipsFileErrors(t *testing.T) {
 	}
 	fs := newTestFileScanner(cfg)
 
-	results := fs.Scan([]string{valid, invalid})
+	results, err := fs.Scan([]string{valid, invalid})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -199,7 +217,10 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 	}
 	fs := newTestFileScanner(cfg)
 
-	results := fs.Scan([]string{file})
+	results, err := fs.Scan([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -220,7 +241,10 @@ func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
 	var errOut bytes.Buffer
 	fs := NewFileScanner(lp, time.Second, &out, &errOut)
 
-	results := fs.Scan(files)
+	results, err := fs.Scan(files)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(results) != 0 {
 		t.Errorf("expected 0 results, got %d", len(results))
@@ -228,6 +252,28 @@ func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
 
 	if !strings.Contains(errOut.String(), "/tmp/nonexistent.log") {
 		t.Errorf("expected error log, got %q", errOut.String())
+	}
+}
+
+func TestFileScanner_Scan_InvalidSince(t *testing.T) {
+	dir := t.TempDir()
+
+	logContent := `2024-03-10T12:00:00Z user=ABC status=ok`
+	writeFile(t, filepath.Join(dir, "svc.log"), []byte(logContent))
+
+	cfg := &ScanConfig{
+		Dir:         dir,
+		SearchValue: "abc",
+		Keys:        []string{"user"},
+		IgnoreCase:  true,
+		Since:       "invalid",
+	}
+
+	fs := newTestFileScanner(cfg)
+
+	_, err := fs.Scan([]string{filepath.Join(dir, "svc.log")})
+	if err == nil {
+		t.Fatalf("expected error, got %v", err)
 	}
 }
 
@@ -278,7 +324,10 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			results := fs.Scan(files)
+			results, err := fs.Scan(files)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if len(results) != tt.expectedLen {
 				t.Fatalf("expected %d results, got %d", tt.expectedLen, len(results))

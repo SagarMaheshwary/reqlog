@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 	"sync"
 
@@ -35,14 +34,14 @@ func NewDockerScanner(lp *LineProcessor,
 	}
 }
 
-func (ds *DockerScanner) Scan(containers []string) []domain.LogEntry {
+func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
 	cfg := ds.lineProcessor.config
 
 	var h entryHeap
 	var results []domain.LogEntry
 	sinceTime, err := parseSince(cfg.Since)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	if cfg.Limit > 0 {
@@ -74,7 +73,7 @@ func (ds *DockerScanner) Scan(containers []string) []domain.LogEntry {
 		results = drainHeap(&h)
 	}
 
-	return results
+	return results, nil
 }
 
 func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f formatter.LogFormatter) {

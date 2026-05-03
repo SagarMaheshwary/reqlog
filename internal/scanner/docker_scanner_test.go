@@ -118,7 +118,10 @@ func TestDockerScanner_Scan(t *testing.T) {
 			var out, errOut bytes.Buffer
 			ds := NewDockerScanner(lp, mock, &out, &errOut)
 
-			results := ds.Scan(tt.containers)
+			results, err := ds.Scan(tt.containers)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if len(results) != tt.want {
 				fmt.Println(results)
@@ -129,6 +132,22 @@ func TestDockerScanner_Scan(t *testing.T) {
 				t.Errorf("expected error log containing %q, got %q", tt.wantErrLog, errOut.String())
 			}
 		})
+	}
+}
+
+func TestDockerScanner_Scan_InvalidSince(t *testing.T) {
+	cfg := &ScanConfig{
+		SearchValue: "abc",
+		Keys:        []string{"user"},
+		IgnoreCase:  true,
+		Since:       "invalid",
+	}
+
+	ds := newTestDockerScanner(cfg, &mockDockerClient{})
+
+	_, err := ds.Scan([]string{"auth"})
+	if err == nil {
+		t.Fatalf("expected error, got %v", err)
 	}
 }
 
@@ -185,8 +204,10 @@ func TestDockerScanner_Scan_JSON(t *testing.T) {
 
 			ds := newTestDockerScanner(cfg, mock)
 
-			results := ds.Scan([]string{tt.container})
-
+			results, err := ds.Scan([]string{tt.container})
+			if err != nil {
+				t.Fatal(err)
+			}
 			if len(results) != tt.expectedLen {
 				t.Fatalf("expected %d results, got %d", tt.expectedLen, len(results))
 			}
@@ -251,6 +272,20 @@ func TestDockerScanner_ListSources(t *testing.T) {
 				t.Fatalf("expected %v, got %v", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestDockerScanner_ListSources_Error(t *testing.T) {
+	mock := &mockDockerClient{
+		listFn: func() ([]string, error) {
+			return nil, errors.New("list error")
+		},
+	}
+	ds := newTestDockerScanner(&ScanConfig{}, mock)
+
+	_, err := ds.ListSources()
+	if err == nil {
+		t.Fatalf("expected error, got %v", err)
 	}
 }
 

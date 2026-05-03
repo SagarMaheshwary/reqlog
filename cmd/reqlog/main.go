@@ -130,7 +130,11 @@ func main() {
 		log.Fatal("no matching sources found")
 	}
 
-	entries := scn.Scan(sources)
+	entries, err := scn.Scan(sources)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	f := formatter.NewFormatter(entries, keys)
 
 	printEntries(f, entries)

@@ -89,7 +89,10 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		entries := fs.Scan(files)
+		entries, err := fs.Scan(files)
+		if err != nil {
+			b.Fatal(err)
+		}
 
 		if len(entries) == 0 {
 			b.Fatalf("expected matches, got none")
@@ -119,7 +122,10 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		entries := fs.Scan(files)
+		entries, err := fs.Scan(files)
+		if err != nil {
+			b.Fatal(err)
+		}
 
 		if len(entries) == 0 {
 			b.Fatalf("expected matches, got none")
