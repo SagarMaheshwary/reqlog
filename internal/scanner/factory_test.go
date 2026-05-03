@@ -4,7 +4,7 @@ import "testing"
 
 func TestNewScanner(t *testing.T) {
 	cfg := &ScanConfig{}
-	lp := NewLineProcessor(cfg, mockParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	tests := []struct {
 		name    string

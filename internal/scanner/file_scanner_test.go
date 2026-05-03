@@ -11,12 +11,10 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/sagarmaheshwary/reqlog/internal/parser"
 )
 
-func newTestFileScanner(cfg *ScanConfig, p parser.LogParser) *FileScanner {
-	lp := NewLineProcessor(cfg, p)
+func newTestFileScanner(cfg *ScanConfig) *FileScanner {
+	lp := NewLineProcessor(cfg, NewTimeParser())
 	return NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 }
 
@@ -42,7 +40,7 @@ func TestFileScanner_Scan(t *testing.T) {
 		IgnoreCase:  false,
 		Keys:        []string{"user"},
 	}
-	lp := NewLineProcessor(cfg, &parser.TextParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 
 	files, err := fs.ListSources()
@@ -80,7 +78,7 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 		Keys:        []string{"user"},
 		Since:       "5m", // should only include recent one
 	}
-	lp := NewLineProcessor(cfg, parser.TextParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 	files, err := fs.ListSources()
@@ -106,7 +104,7 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 		Keys:        []string{"user"},
 		IgnoreCase:  true,
 	}
-	lp := NewLineProcessor(cfg, parser.TextParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 	files, err := fs.ListSources()
@@ -131,7 +129,7 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
-	lp := NewLineProcessor(cfg, parser.TextParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 	files, err := fs.ListSources()
@@ -159,7 +157,7 @@ func TestScan_MultiFile_GlobalLimit(t *testing.T) {
 		Keys:        []string{"id"},
 		Limit:       2,
 	}
-	fs := newTestFileScanner(cfg, parser.TextParser{})
+	fs := newTestFileScanner(cfg)
 
 	results := fs.Scan([]string{file1, file2})
 
@@ -180,7 +178,7 @@ func TestScan_SkipsFileErrors(t *testing.T) {
 		SearchValue: "123",
 		Keys:        []string{"id"},
 	}
-	fs := newTestFileScanner(cfg, parser.TextParser{})
+	fs := newTestFileScanner(cfg)
 
 	results := fs.Scan([]string{valid, invalid})
 
@@ -199,7 +197,7 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 		SearchValue: "123",
 		Keys:        []string{"id"},
 	}
-	fs := newTestFileScanner(cfg, parser.TextParser{})
+	fs := newTestFileScanner(cfg)
 
 	results := fs.Scan([]string{file})
 
@@ -213,7 +211,7 @@ func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
-	lp := NewLineProcessor(cfg, parser.TextParser{})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	// pass a missing file to trigger error
 	files := []string{"/tmp/nonexistent.log"}
@@ -269,9 +267,10 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 				Dir:         dir,
 				SearchValue: "123",
 				Keys:        []string{"user"},
+				JSONMode:    true,
 			}
 
-			lp := NewLineProcessor(cfg, parser.JSONParser{})
+			lp := NewLineProcessor(cfg, NewTimeParser())
 			fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
 
 			files, err := fs.ListSources()
@@ -365,7 +364,7 @@ func TestListSources(t *testing.T) {
 			tt.setup(dir)
 			tt.cfg.Dir = dir
 
-			fs := newTestFileScanner(tt.cfg, mockParser{})
+			fs := newTestFileScanner(tt.cfg)
 
 			files, err := fs.ListSources()
 			if err != nil {
@@ -442,7 +441,7 @@ func TestFileScanner_Follow(t *testing.T) {
 			var out bytes.Buffer
 
 			cfg := &ScanConfig{SearchValue: "123", Keys: []string{"user"}}
-			lp := NewLineProcessor(cfg, parser.TextParser{})
+			lp := NewLineProcessor(cfg, NewTimeParser())
 			fs := NewFileScanner(lp, 10*time.Millisecond, &out, io.Discard)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -481,7 +480,7 @@ func TestFileScanner_Follow_Errors(t *testing.T) {
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
-	lp := NewLineProcessor(cfg, mockParser{extractOK: true})
+	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer

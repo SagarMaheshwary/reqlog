@@ -25,6 +25,7 @@ type ScanConfig struct {
 	Limit       int
 	Recursive   bool
 	Services    []string
+	JSONMode    bool
 }
 
 type FileScanner struct {
