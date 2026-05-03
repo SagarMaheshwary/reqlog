@@ -42,7 +42,7 @@ func parseSince(s string, now time.Time) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf(
-		"invalid --since value %q\n\nExamples:\n  --since 10m\n  --since 1h\n  --since 2026-04-29T19:44:06Z\n  --since 2026-04-29\n 1710943200",
+		"invalid --since value %q\n\nExamples:\n  --since 10m\n  --since 1h\n  --since 2026-04-29T19:44:06Z\n  --since 2026-04-29\n  --since 1710943200",
 		s,
 	)
 }
