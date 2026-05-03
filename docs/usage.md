@@ -60,7 +60,7 @@ reqlog \
 reqlog --service order-service* abc123
 ```
 
-### Time Filtering
+## Time Filtering
 
 `--since` accepts either a Go duration or an absolute timestamp.
 
