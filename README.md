@@ -146,6 +146,10 @@ reqlog --service order-service* abc123
 
 ```bash
 reqlog --since 10m --key request_id abc123
+reqlog --since 2026-04-29 --key request_id abc123
+reqlog --since 2026-04-29T14:00:00Z --key request_id abc123
+reqlog --since 2026-04-29T14:00:00.123Z --key request_id abc123
+reqlog --since 1710943200 --key request_id abc123
 ```
 
 ### Follow Logs (Live)
@@ -178,31 +182,41 @@ reqlog --follow --key request_id abc123
 
 ## Supported Log Formats
 
+### Supported Timestamp Formats
+
+- **RFC3339 / ISO-8601**
+  - with or without fractional seconds
+- **Unix timestamps**
+  - seconds (10 digits)
+  - milliseconds (13 digits)
+  - microseconds (16 digits)
+  - nanoseconds (19 digits)
+
+Timestamps are normalized to **millisecond precision** in output (fixed 3 digits).
+
 ### Text Logs
 
-- ISO-8601 / RFC3339 timestamps at start
-- Supports timestamps **with or without fractional seconds**
-- Outputs timestamps in **millisecond precision (fixed 3 digits)**
-- `key=value` fields
+- Timestamp must appear as the first field
+- Supports `key=value` fields
 
 ```text
 2026-03-20T14:00:00Z request_id=abc123 start request
 2026-03-20T14:00:00.123Z request_id=abc123 processing
+1710943200 request_id=abc123 unix seconds
+1710943200123 request_id=abc123 unix milliseconds
 ```
 
 ### JSON Logs
 
-- One JSON per line
-- Timestamp fields: `time`, `timestamp`, `ts`
-- Supports timestamps **with or without fractional seconds**
-- Outputs timestamps in **millisecond precision (fixed 3 digits)**
+- One JSON object per line
+- Supported timestamp fields: `time`, `timestamp`, `ts`
 
 ```json
 { "time": "2026-03-20T14:10:00Z", "request_id": "abc", "message": "start" }
 { "time": "2026-03-20T14:10:00.456Z", "request_id": "abc", "message": "processing" }
+{ "ts": 1710943200, "request_id": "abc", "message": "unix seconds" }
+{ "ts": 1710943200123, "request_id": "abc", "message": "unix milliseconds" }
 ```
-
-> Timestamps are parsed using RFC3339 (nano precision) and normalized to millisecond precision in output.
 
 ## Roadmap
 
@@ -213,7 +227,7 @@ reqlog --follow --key request_id abc123
 - [x] JSON log parsing
 - [x] Wildcard support in `--service` (e.g. order-service\*)
 
-- [ ] Unix timestamp support (logs + `--since`)
+- [x] Unix timestamp support (logs + `--since`)
 - [ ] Optimize `--limit` (early exit / streaming)
 - [ ] `--context` flag (show surrounding lines)
 - [ ] `--fields` flag for JSON logs
