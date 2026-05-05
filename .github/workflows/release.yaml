@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          # Linux
+          GOOS=linux  GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-linux-amd64  ./cmd/reqlog
+          GOOS=linux  GOARCH=arm64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-linux-arm64  ./cmd/reqlog
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-windows-amd64.exe ./cmd/reqlog
+          # macOS
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-darwin-amd64 ./cmd/reqlog
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-darwin-arm64 ./cmd/reqlog
+
+      - name: Verify version
+        run: ./reqlog-linux-amd64 --version
+
+      - name: Archive binaries
+        run: |
+          zip  reqlog-windows-amd64.zip       reqlog-windows-amd64.exe
+          tar -czf reqlog-linux-amd64.tar.gz  reqlog-linux-amd64
+          tar -czf reqlog-linux-arm64.tar.gz  reqlog-linux-arm64
+          tar -czf reqlog-darwin-amd64.tar.gz reqlog-darwin-amd64
+          tar -czf reqlog-darwin-arm64.tar.gz reqlog-darwin-arm64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            reqlog-windows-amd64.zip
+            reqlog-linux-amd64.tar.gz
+            reqlog-linux-arm64.tar.gz
+            reqlog-darwin-amd64.tar.gz
+            reqlog-darwin-arm64.tar.gz
