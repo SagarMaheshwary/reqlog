@@ -142,6 +142,8 @@ Wildcard support:
 reqlog --service order-service* abc123
 ```
 
+> `--service` filters **container names** when using `--source docker`; otherwise, it filters **log file names**.
+
 ### Time Filtering
 
 ```bash
@@ -226,7 +228,6 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 - [x] Text log parsing (key=value)
 - [x] JSON log parsing
 - [x] Wildcard support in `--service` (e.g. order-service\*)
-
 - [x] Unix timestamp support (logs + `--since`)
 - [ ] Optimize `--limit` (early exit / streaming)
 - [ ] `--context` flag (show surrounding lines)
