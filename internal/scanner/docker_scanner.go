@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"bufio"
-	"container/heap"
 	"context"
 	"fmt"
 	"io"
@@ -20,33 +19,30 @@ type DockerScanner struct {
 	dockerClient  docker.DockerClient
 	out           io.Writer
 	errOut        io.Writer
+	now           time.Time
 }
 
 func NewDockerScanner(lp *LineProcessor,
 	client docker.DockerClient,
 	out io.Writer,
 	errOut io.Writer,
+	now time.Time,
 ) *DockerScanner {
 	return &DockerScanner{
 		lineProcessor: lp,
 		dockerClient:  client,
 		out:           out,
 		errOut:        errOut,
+		now:           now,
 	}
 }
 
 func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
 	cfg := ds.lineProcessor.config
 
-	var h entryHeap
-	var results []domain.LogEntry
-	sinceTime, err := parseSince(cfg.Since, time.Now())
+	collector, err := NewEntryCollector(cfg, ds.now)
 	if err != nil {
 		return nil, err
-	}
-
-	if cfg.Limit > 0 {
-		heap.Init(&h)
 	}
 
 	for _, container := range containers {
@@ -58,23 +54,26 @@ func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
 
 		func() {
 			defer reader.Close()
+			collector.StartSource()
 
 			scanner := bufio.NewScanner(reader)
 			for scanner.Scan() {
 				line := scanner.Text()
+
 				entry, ok := ds.lineProcessor.ProcessLine(line, container)
-				if ok && passesSince(entry, sinceTime) {
-					ds.lineProcessor.AddEntry(*entry, &results, &h)
+				if !ok {
+					continue
+				}
+
+				continueReading := collector.Add(entry)
+				if !continueReading {
+					break
 				}
 			}
 		}()
 	}
 
-	if cfg.Limit > 0 {
-		results = drainHeap(&h)
-	}
-
-	return results, nil
+	return collector.Results(), nil
 }
 
 func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f formatter.LogFormatter) {

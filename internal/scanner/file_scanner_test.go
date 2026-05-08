@@ -15,7 +15,7 @@ import (
 
 func newTestFileScanner(cfg *ScanConfig) *FileScanner {
 	lp := NewLineProcessor(cfg, NewTimeParser())
-	return NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+	return NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 }
 
 func writeFile(t *testing.T, path string, content []byte) {
@@ -41,7 +41,7 @@ func TestFileScanner_Scan(t *testing.T) {
 		Keys:        []string{"user"},
 	}
 	lp := NewLineProcessor(cfg, NewTimeParser())
-	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 
 	files, err := fs.ListSources()
 	if err != nil {
@@ -83,7 +83,7 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 	}
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
-	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	}
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
-	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	}
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
-	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+	fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 	files, err := fs.ListSources()
 	if err != nil {
 		t.Fatal(err)
@@ -155,14 +155,23 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	}
 }
 
-func TestScan_MultiFile_GlobalLimit(t *testing.T) {
+func TestScan_MultiFile_Limit(t *testing.T) {
 	dir := t.TempDir()
 
 	file1 := filepath.Join(dir, "a.log")
 	file2 := filepath.Join(dir, "b.log")
 
-	writeFile(t, file1, []byte("2024-03-10T12:00:00Z id=123\nid=123\n"))
-	writeFile(t, file2, []byte("2024-03-10T12:00:00Z id=123\nid=123\n"))
+	writeFile(t, file1, []byte(`
+2024-03-10T12:00:01Z id=123
+2024-03-10T12:00:03Z id=123
+2024-03-10T12:00:05Z id=123
+`))
+
+	writeFile(t, file2, []byte(`
+2024-03-10T12:00:02Z id=123
+2024-03-10T12:00:04Z id=123
+2024-03-10T12:00:06Z id=123
+`))
 
 	cfg := &ScanConfig{
 		SearchValue: "123",
@@ -178,6 +187,64 @@ func TestScan_MultiFile_GlobalLimit(t *testing.T) {
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+}
+
+func TestScan_MultiFile_Latest(t *testing.T) {
+	dir := t.TempDir()
+
+	file1 := filepath.Join(dir, "a.log")
+	file2 := filepath.Join(dir, "b.log")
+
+	writeFile(t, file1, []byte(`
+2024-03-10T12:00:01Z id=123
+2024-03-10T12:00:03Z id=123
+2024-03-10T12:00:05Z id=123
+`))
+
+	writeFile(t, file2, []byte(`
+2024-03-10T12:00:02Z id=123
+2024-03-10T12:00:04Z id=123
+2024-03-10T12:00:06Z id=123
+`))
+
+	cfg := &ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"id"},
+		Limit:       2,
+		Latest:      true,
+	}
+
+	fs := newTestFileScanner(cfg)
+
+	results, err := fs.Scan([]string{file1, file2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	expected := []string{
+		"2024-03-10T12:00:05Z",
+		"2024-03-10T12:00:06Z",
+	}
+
+	for i, ts := range expected {
+		expectedTime, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !results[i].Timestamp.Equal(expectedTime) {
+			t.Fatalf(
+				"result[%d]: expected %v, got %v",
+				i,
+				expectedTime,
+				results[i].Timestamp,
+			)
+		}
 	}
 }
 
@@ -239,7 +306,7 @@ func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	fs := NewFileScanner(lp, time.Second, &out, &errOut)
+	fs := NewFileScanner(lp, time.Second, &out, &errOut, time.Now())
 
 	results, err := fs.Scan(files)
 	if err != nil {
@@ -317,7 +384,7 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 			}
 
 			lp := NewLineProcessor(cfg, NewTimeParser())
-			fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard)
+			fs := NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 
 			files, err := fs.ListSources()
 			if err != nil {
@@ -491,7 +558,7 @@ func TestFileScanner_Follow(t *testing.T) {
 
 			cfg := &ScanConfig{SearchValue: "123", Keys: []string{"user"}}
 			lp := NewLineProcessor(cfg, NewTimeParser())
-			fs := NewFileScanner(lp, 10*time.Millisecond, &out, io.Discard)
+			fs := NewFileScanner(lp, 10*time.Millisecond, &out, io.Discard, time.Now())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
@@ -533,7 +600,7 @@ func TestFileScanner_Follow_Errors(t *testing.T) {
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	fs := NewFileScanner(lp, 10*time.Millisecond, &out, &errOut)
+	fs := NewFileScanner(lp, 10*time.Millisecond, &out, &errOut, time.Now())
 
 	// pass a missing file to trigger error
 	files := []string{"/tmp/nonexistent.log"}

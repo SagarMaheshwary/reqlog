@@ -18,7 +18,8 @@ import (
 var (
 	dir         = flag.String("dir", "./logs", "directory containing log files")
 	ignoreCase  = flag.Bool("ignore-case", false, "perform case-insensitive search")
-	limit       = flag.Int("limit", 0, "limit number of results (returns newest N matches)")
+	limit       = flag.Int("limit", 0, "limit number of results")
+	latest      = flag.Bool("latest", false, "return globally latest N matches across all sources")
 	jsonMode    = flag.Bool("json", false, "parse logs as JSON (one JSON object per line)")
 	follow      = flag.Bool("follow", false, "follow logs in real time (like tail -f)")
 	key         = flag.String("key", "", "field key to match (e.g. request_id, trace_id, event_key)")
@@ -47,7 +48,7 @@ Examples:
   # Case-insensitive search
   reqlog --ignore-case abc123
 
-  # Limit results (latest 10 matches)
+  # Limit results
   reqlog --limit 10 abc123
 
   # Filter by key
@@ -105,6 +106,10 @@ func main() {
 		services = strings.Split(*service, ",")
 	}
 
+	if *latest && *limit == 0 {
+		log.Fatal("--latest requires --limit")
+	}
+
 	cfg := &scanner.ScanConfig{
 		Dir:         *dir,
 		SearchValue: SearchValue,
@@ -115,6 +120,7 @@ func main() {
 		Recursive:   *recursive,
 		Services:    services,
 		JSONMode:    *jsonMode,
+		Latest:      *latest,
 	}
 	scn, err := scanner.New(*source, scanner.NewLineProcessor(cfg, scanner.NewTimeParser()))
 	if err != nil {

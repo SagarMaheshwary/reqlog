@@ -1,13 +1,9 @@
 package scanner
 
 import (
-	"container/heap"
-	"sort"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/tidwall/gjson"
 )
 
@@ -184,76 +180,6 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 			if ok {
 				if entry.Service != "svc" {
 					t.Fatalf("unexpected service")
-				}
-			}
-		})
-	}
-}
-
-func TestLineProcessor_AddEntry(t *testing.T) {
-	tests := []struct {
-		name   string
-		limit  int
-		inputs []int64 // timestamps
-		expect []int64
-	}{
-		{
-			name:   "no limit",
-			limit:  0,
-			inputs: []int64{1, 2, 3},
-			expect: []int64{1, 2, 3},
-		},
-		{
-			name:   "limit keeps latest",
-			limit:  2,
-			inputs: []int64{1, 2, 3},
-			expect: []int64{2, 3},
-		},
-		{
-			name:   "limit with unordered input",
-			limit:  2,
-			inputs: []int64{3, 1, 2},
-			expect: []int64{2, 3},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ScanConfig{Limit: tt.limit}
-			lp := NewLineProcessor(cfg, nil)
-
-			var results []domain.LogEntry
-			h := &entryHeap{}
-			heap.Init(h)
-
-			for _, ts := range tt.inputs {
-				entry := domain.LogEntry{
-					Timestamp: time.Unix(ts, 0),
-				}
-				lp.AddEntry(entry, &results, h)
-			}
-
-			var got []int64
-
-			if tt.limit <= 0 {
-				for _, e := range results {
-					got = append(got, e.Timestamp.Unix())
-				}
-			} else {
-				for _, e := range *h {
-					got = append(got, e.Timestamp.Unix())
-				}
-			}
-
-			sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
-
-			if len(got) != len(tt.expect) {
-				t.Fatalf("expected %v, got %v", tt.expect, got)
-			}
-
-			for i := range got {
-				if got[i] != tt.expect[i] {
-					t.Fatalf("expected %v, got %v", tt.expect, got)
 				}
 			}
 		})

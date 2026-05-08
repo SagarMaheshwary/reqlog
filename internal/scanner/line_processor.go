@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"container/heap"
 	"sort"
 	"strings"
 	"sync"
@@ -95,27 +94,6 @@ func (lp *LineProcessor) processTextLine(line string, service string) (*domain.L
 		Service:   service,
 		Message:   extractTextMessage(line),
 	}, true
-}
-
-func (lp *LineProcessor) AddEntry(
-	entry domain.LogEntry,
-	results *[]domain.LogEntry,
-	h *entryHeap,
-) {
-	if lp.config.Limit <= 0 {
-		*results = append(*results, entry)
-		return
-	}
-
-	if h.Len() < lp.config.Limit {
-		heap.Push(h, entry)
-		return
-	}
-
-	if entry.Timestamp.After((*h)[0].Timestamp) {
-		heap.Pop(h)
-		heap.Push(h, entry)
-	}
 }
 
 func (lp *LineProcessor) extractJSONTimestampValue(
