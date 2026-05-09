@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"bufio"
-	"container/heap"
 	"context"
 	"fmt"
 	"io"
@@ -25,6 +24,7 @@ type ScanConfig struct {
 	Recursive   bool
 	Services    []string
 	JSONMode    bool
+	Latest      bool
 }
 
 type FileScanner struct {
@@ -33,6 +33,7 @@ type FileScanner struct {
 	followInterval time.Duration
 	out            io.Writer
 	errOut         io.Writer
+	now            time.Time
 }
 
 func NewFileScanner(
@@ -40,27 +41,24 @@ func NewFileScanner(
 	followInterval time.Duration,
 	out io.Writer,
 	errOut io.Writer,
+	now time.Time,
 ) *FileScanner {
 	return &FileScanner{
 		offsets:        make(map[string]int64),
 		lineProcessor:  lp,
-		followInterval: followInterval, // default
+		followInterval: followInterval,
 		out:            out,
 		errOut:         errOut,
+		now:            now,
 	}
 }
 
 func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
-	var h entryHeap
-	var results []domain.LogEntry
 	cfg := fs.lineProcessor.config
-	sinceTime, err := parseSince(cfg.Since, time.Now())
+
+	collector, err := NewEntryCollector(cfg, fs.now)
 	if err != nil {
 		return nil, err
-	}
-
-	if cfg.Limit > 0 {
-		heap.Init(&h)
 	}
 
 	for _, path := range files {
@@ -72,6 +70,7 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 
 		offset, err := func() (int64, error) {
 			defer file.Close()
+			collector.StartSource()
 
 			service := strings.TrimSuffix(filepath.Base(path), ".log")
 			reader := bufio.NewReader(file)
@@ -84,8 +83,13 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 					offset += int64(len(line))
 
 					entry, ok := fs.lineProcessor.ProcessLine(line, service)
-					if ok && passesSince(entry, sinceTime) {
-						fs.lineProcessor.AddEntry(*entry, &results, &h)
+					if !ok {
+						continue
+					}
+
+					continueReading := collector.Add(entry)
+					if !continueReading {
+						break
 					}
 				}
 
@@ -107,11 +111,7 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 		fs.offsets[path] = offset
 	}
 
-	if cfg.Limit > 0 {
-		results = drainHeap(&h)
-	}
-
-	return results, nil
+	return collector.Results(), nil
 }
 
 func (fs *FileScanner) Follow(ctx context.Context, files []string, f formatter.LogFormatter) {

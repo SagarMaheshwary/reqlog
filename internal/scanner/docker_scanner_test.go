@@ -24,7 +24,7 @@ func dockerLogs(lines []string) io.ReadCloser {
 
 func newTestDockerScanner(cfg *ScanConfig, client docker.DockerClient) *DockerScanner {
 	lp := NewLineProcessor(cfg, NewTimeParser())
-	return NewDockerScanner(lp, client, io.Discard, io.Discard)
+	return NewDockerScanner(lp, client, io.Discard, io.Discard, time.Now())
 }
 
 func TestDockerScanner_Scan(t *testing.T) {
@@ -77,7 +77,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 		{
 			name: "multi container with limit",
 			logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
-				return dockerLogs([]string{"2024-03-10T12:00:00Z id=123", "2024-03-10T12:00:00Z id=123"}), nil
+				return dockerLogs([]string{"2024-03-10T12:00:00Z id=123", "2024-03-10T12:00:00Z id=123", "2024-03-10T12:00:00Z id=123"}), nil
 			},
 			cfg:        &ScanConfig{SearchValue: "123", Keys: []string{"id"}, Limit: 2},
 			containers: []string{"a", "b"},
@@ -116,7 +116,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 
 			lp := NewLineProcessor(tt.cfg, NewTimeParser())
 			var out, errOut bytes.Buffer
-			ds := NewDockerScanner(lp, mock, &out, &errOut)
+			ds := NewDockerScanner(lp, mock, &out, &errOut, time.Now())
 
 			results, err := ds.Scan(tt.containers)
 			if err != nil {
@@ -216,6 +216,75 @@ func TestDockerScanner_Scan_JSON(t *testing.T) {
 				tt.assert(t, results)
 			}
 		})
+	}
+}
+
+func TestDockerScanner_Scan_Latest(t *testing.T) {
+	mock := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			switch container {
+			case "a":
+				return dockerLogs([]string{
+					"2024-03-10T12:00:01Z id=123",
+					"2024-03-10T12:00:03Z id=123",
+					"2024-03-10T12:00:05Z id=123",
+				}), nil
+
+			case "b":
+				return dockerLogs([]string{
+					"2024-03-10T12:00:02Z id=123",
+					"2024-03-10T12:00:04Z id=123",
+					"2024-03-10T12:00:06Z id=123",
+				}), nil
+			}
+
+			return dockerLogs(nil), nil
+		},
+		listFn: func() ([]string, error) {
+			return []string{"a", "b"}, nil
+		},
+	}
+
+	cfg := &ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"id"},
+		Limit:       2,
+		Latest:      true,
+	}
+
+	lp := NewLineProcessor(cfg, NewTimeParser())
+
+	var out, errOut bytes.Buffer
+	ds := NewDockerScanner(lp, mock, &out, &errOut, time.Now())
+
+	results, err := ds.Scan([]string{"a", "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	expected := []string{
+		"2024-03-10T12:00:05Z",
+		"2024-03-10T12:00:06Z",
+	}
+
+	for i, ts := range expected {
+		expectedTime, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !results[i].Timestamp.Equal(expectedTime) {
+			t.Fatalf(
+				"result[%d]: expected %v, got %v",
+				i,
+				expectedTime,
+				results[i].Timestamp,
+			)
+		}
 	}
 }
 
@@ -352,7 +421,7 @@ func TestDockerScanner_Follow(t *testing.T) {
 			}
 
 			var out bytes.Buffer
-			ds := NewDockerScanner(lp, client, &out, io.Discard)
+			ds := NewDockerScanner(lp, client, &out, io.Discard, time.Now())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
@@ -394,7 +463,7 @@ func TestDockerScanner_Follow_Errors(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 
-	ds := NewDockerScanner(lp, client, &out, &errOut)
+	ds := NewDockerScanner(lp, client, &out, &errOut, time.Now())
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

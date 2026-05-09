@@ -11,9 +11,9 @@ import (
 func New(source string, lp *LineProcessor) (Scanner, error) {
 	switch source {
 	case "file":
-		return NewFileScanner(lp, time.Second, os.Stdout, os.Stderr), nil
+		return NewFileScanner(lp, time.Second, os.Stdout, os.Stderr, time.Now()), nil
 	case "docker":
-		return NewDockerScanner(lp, docker.NewDockerCLIClient(), os.Stdout, os.Stderr), nil
+		return NewDockerScanner(lp, docker.NewDockerCLIClient(), os.Stdout, os.Stderr, time.Now()), nil
 	default:
 		return nil, fmt.Errorf("unknown source type")
 	}
