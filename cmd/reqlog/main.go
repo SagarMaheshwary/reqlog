@@ -27,7 +27,8 @@ var (
 	recursive   = flag.Bool("recursive", true, "scan directories recursively")
 	service     = flag.String("service", "", "filter by service name (comma-separated, e.g. order-service,inventory-service)")
 	source      = flag.String("source", "file", `log source backend: "file", "docker"`)
-	showVersion = flag.Bool("version", false, "print version and exit")
+	versionFlag = flag.Bool("version", false, "print version and exit")
+	contextFlag = flag.Int("context", 0, "show N lines of context before and after each match")
 )
 
 var version = "dev"
@@ -82,7 +83,7 @@ Examples:
 func main() {
 	flag.Parse()
 
-	if *showVersion {
+	if *versionFlag {
 		fmt.Printf("reqlog version %s\n", cliVersion())
 		return
 	}
@@ -110,7 +111,7 @@ func main() {
 		log.Fatal("--latest requires --limit")
 	}
 
-	cfg := &scanner.ScanConfig{
+	cfg := &scanner.Config{
 		Dir:         *dir,
 		SearchValue: SearchValue,
 		IgnoreCase:  *ignoreCase,
@@ -121,6 +122,7 @@ func main() {
 		Services:    services,
 		JSONMode:    *jsonMode,
 		Latest:      *latest,
+		Context:     *contextFlag,
 	}
 	scn, err := scanner.New(*source, scanner.NewLineProcessor(cfg, scanner.NewTimeParser()))
 	if err != nil {

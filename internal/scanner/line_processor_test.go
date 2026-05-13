@@ -65,7 +65,7 @@ func TestLineProcessor_ProcessLine_TextMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ScanConfig{
+			cfg := &Config{
 				SearchValue: tt.searchValue,
 				IgnoreCase:  tt.ignoreCase,
 				Keys:        tt.keys,
@@ -162,7 +162,7 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ScanConfig{
+			cfg := &Config{
 				SearchValue: tt.searchValue,
 				IgnoreCase:  tt.ignoreCase,
 				Keys:        tt.keys,
@@ -186,10 +186,122 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 	}
 }
 
+func TestLineProcessor_ParseOnly(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       *Config
+		line      string
+		service   string
+		wantOK    bool
+		wantMsg   string
+		wantSvc   string
+		wantIsNil bool
+	}{
+		{
+			name:    "valid text log",
+			cfg:     &Config{},
+			line:    "2024-03-10T12:00:00Z user=999 status=ok",
+			service: "auth",
+			wantOK:  true,
+			wantMsg: "user=999 status=ok",
+			wantSvc: "auth",
+		},
+		{
+			name:      "invalid timestamp",
+			cfg:       &Config{},
+			line:      "invalid user=123",
+			service:   "auth",
+			wantOK:    false,
+			wantIsNil: true,
+		},
+		{
+			name:      "missing key=value field",
+			cfg:       &Config{},
+			line:      "2024-03-10T12:00:00Z",
+			service:   "auth",
+			wantOK:    false,
+			wantIsNil: true,
+		},
+		{
+			name: "valid json log",
+			cfg: &Config{
+				JSONMode: true,
+			},
+			line:    `{"time":"2024-03-10T12:00:00Z","user":"999","status":"ok"}`,
+			service: "api",
+			wantOK:  true,
+			wantSvc: "api",
+		},
+		{
+			name: "invalid json log",
+			cfg: &Config{
+				JSONMode: true,
+			},
+			line:      `{"time":"2024-03-10T12:00:00Z"`,
+			service:   "api",
+			wantOK:    false,
+			wantIsNil: true,
+		},
+		{
+			name: "json missing timestamp",
+			cfg: &Config{
+				JSONMode: true,
+			},
+			line:      `{"user":"123"}`,
+			service:   "api",
+			wantOK:    false,
+			wantIsNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lp := NewLineProcessor(tt.cfg, NewTimeParser())
+
+			entry, ok := lp.ParseOnly(tt.line, tt.service)
+
+			if ok != tt.wantOK {
+				t.Fatalf("expected ok=%v, got %v", tt.wantOK, ok)
+			}
+
+			if tt.wantIsNil {
+				if entry != nil {
+					t.Fatalf("expected nil entry, got %+v", entry)
+				}
+				return
+			}
+
+			if entry == nil {
+				t.Fatal("expected non-nil entry")
+			}
+
+			if tt.wantMsg != "" && entry.Message != tt.wantMsg {
+				t.Fatalf(
+					"expected message %q, got %q",
+					tt.wantMsg,
+					entry.Message,
+				)
+			}
+
+			if entry.Service != tt.wantSvc {
+				t.Fatalf(
+					"expected service %q, got %q",
+					tt.wantSvc,
+					entry.Service,
+				)
+			}
+
+			if entry.Timestamp.IsZero() {
+				t.Fatal("expected non-zero timestamp")
+			}
+		})
+	}
+}
+
 func TestLineProcessor_JSONTimestampKeyCaching(t *testing.T) {
 	tp := NewTimeParser()
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "abc",
 		Keys:        []string{"request_id"},
 		JSONMode:    true,

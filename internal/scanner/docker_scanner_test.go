@@ -22,7 +22,7 @@ func dockerLogs(lines []string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(strings.Join(lines, "\n")))
 }
 
-func newTestDockerScanner(cfg *ScanConfig, client docker.DockerClient) *DockerScanner {
+func newTestDockerScanner(cfg *Config, client docker.DockerClient) *DockerScanner {
 	lp := NewLineProcessor(cfg, NewTimeParser())
 	return NewDockerScanner(lp, client, io.Discard, io.Discard, time.Now())
 }
@@ -35,7 +35,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 	tests := []struct {
 		name       string
 		logsFn     func(container string, follow bool, since string) (io.ReadCloser, error)
-		cfg        *ScanConfig
+		cfg        *Config
 		containers []string
 		want       int
 		wantErrLog string
@@ -49,7 +49,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 					"2024-03-10T12:02:00Z user=123 status=ok",
 				}), nil
 			},
-			cfg:        &ScanConfig{SearchValue: "123", Keys: []string{"user"}},
+			cfg:        &Config{SearchValue: "123", Keys: []string{"user"}},
 			containers: []string{"auth"},
 			want:       2,
 		},
@@ -61,7 +61,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 					newTime + " user=123",
 				}), nil
 			},
-			cfg:        &ScanConfig{SearchValue: "123", Keys: []string{"user"}, Since: "5m"},
+			cfg:        &Config{SearchValue: "123", Keys: []string{"user"}, Since: "5m"},
 			containers: []string{"svc"},
 			want:       1,
 		},
@@ -70,7 +70,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 			logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
 				return dockerLogs([]string{"2024-03-10T12:00:00Z user=ABC"}), nil
 			},
-			cfg:        &ScanConfig{SearchValue: "abc", Keys: []string{"user"}, IgnoreCase: true},
+			cfg:        &Config{SearchValue: "abc", Keys: []string{"user"}, IgnoreCase: true},
 			containers: []string{"svc"},
 			want:       1,
 		},
@@ -79,7 +79,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 			logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
 				return dockerLogs([]string{"2024-03-10T12:00:00Z id=123", "2024-03-10T12:00:00Z id=123", "2024-03-10T12:00:00Z id=123"}), nil
 			},
-			cfg:        &ScanConfig{SearchValue: "123", Keys: []string{"id"}, Limit: 2},
+			cfg:        &Config{SearchValue: "123", Keys: []string{"id"}, Limit: 2},
 			containers: []string{"a", "b"},
 			want:       2,
 		},
@@ -91,7 +91,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 				}
 				return dockerLogs([]string{"2024-03-10T12:00:00Z id=123"}), nil
 			},
-			cfg:        &ScanConfig{SearchValue: "123", Keys: []string{"id"}},
+			cfg:        &Config{SearchValue: "123", Keys: []string{"id"}},
 			containers: []string{"good", "bad"},
 			want:       1,
 		},
@@ -100,7 +100,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 			logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
 				return nil, fmt.Errorf("docker scan error")
 			},
-			cfg:        &ScanConfig{SearchValue: "123", Keys: []string{"user"}},
+			cfg:        &Config{SearchValue: "123", Keys: []string{"user"}},
 			containers: []string{"auth"},
 			want:       0,
 			wantErrLog: "docker scan error",
@@ -136,7 +136,7 @@ func TestDockerScanner_Scan(t *testing.T) {
 }
 
 func TestDockerScanner_Scan_InvalidSince(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "abc",
 		Keys:        []string{"user"},
 		IgnoreCase:  true,
@@ -196,7 +196,7 @@ func TestDockerScanner_Scan_JSON(t *testing.T) {
 				},
 			}
 
-			cfg := &ScanConfig{
+			cfg := &Config{
 				SearchValue: "123",
 				Keys:        []string{"user"},
 				JSONMode:    true,
@@ -245,7 +245,7 @@ func TestDockerScanner_Scan_Latest(t *testing.T) {
 		},
 	}
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 		Limit:       2,
@@ -288,6 +288,93 @@ func TestDockerScanner_Scan_Latest(t *testing.T) {
 	}
 }
 
+func TestDockerScanner_Scan_Context(t *testing.T) {
+	mock := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			return dockerLogs([]string{
+				"2024-03-10T12:00:00Z user=ignore",
+				"2024-03-10T12:00:01Z user=123",
+				"2024-03-10T12:00:02Z user=ignore",
+				"2024-03-10T12:00:03Z user=ignore",
+				"2024-03-10T12:00:04Z user=123", // should not be processed
+			}), nil
+		},
+		listFn: func() ([]string, error) {
+			return []string{"auth"}, nil
+		},
+	}
+
+	cfg := &Config{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+		Context:     2,
+		Limit:       1,
+	}
+
+	lp := NewLineProcessor(cfg, NewTimeParser())
+
+	var out, errOut bytes.Buffer
+
+	ds := NewDockerScanner(
+		lp,
+		mock,
+		&out,
+		&errOut,
+		time.Now(),
+	)
+
+	results, err := ds.Scan([]string{"auth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
+	}
+
+	expected := []struct {
+		message   string
+		isContext bool
+	}{
+		{
+			message:   "user=ignore",
+			isContext: true,
+		},
+		{
+			message:   "user=123",
+			isContext: false,
+		},
+		{
+			message:   "user=ignore",
+			isContext: true,
+		},
+		{
+			message:   "user=ignore",
+			isContext: true,
+		},
+	}
+
+	for i, exp := range expected {
+		if results[i].Message != exp.message {
+			t.Fatalf(
+				"result[%d]: expected message %q, got %q",
+				i,
+				exp.message,
+				results[i].Message,
+			)
+		}
+
+		if results[i].IsContext != exp.isContext {
+			t.Fatalf(
+				"result[%d]: expected IsContext=%v, got %v",
+				i,
+				exp.isContext,
+				results[i].IsContext,
+			)
+		}
+	}
+}
+
 func TestDockerScanner_ListSources(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -323,7 +410,7 @@ func TestDockerScanner_ListSources(t *testing.T) {
 				},
 			}
 
-			cfg := &ScanConfig{
+			cfg := &Config{
 				Services: tt.services,
 			}
 
@@ -350,7 +437,7 @@ func TestDockerScanner_ListSources_Error(t *testing.T) {
 			return nil, errors.New("list error")
 		},
 	}
-	ds := newTestDockerScanner(&ScanConfig{}, mock)
+	ds := newTestDockerScanner(&Config{}, mock)
 
 	_, err := ds.ListSources()
 	if err == nil {
@@ -359,7 +446,7 @@ func TestDockerScanner_ListSources_Error(t *testing.T) {
 }
 
 func TestDockerScanner_Follow(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
@@ -447,7 +534,7 @@ func TestDockerScanner_Follow(t *testing.T) {
 }
 
 func TestDockerScanner_Follow_Errors(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}

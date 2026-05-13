@@ -3,7 +3,7 @@ package scanner
 import "testing"
 
 func TestNewScanner(t *testing.T) {
-	cfg := &ScanConfig{}
+	cfg := &Config{}
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	tests := []struct {

@@ -43,9 +43,16 @@ func (f *Formatter) Format(entry domain.LogEntry) string {
 	serviceColor := f.colorizer.Color(entry.Service)
 	padding := f.padAfter(entry.Service)
 
+	msg := f.formatMessage(entry.Message)
+
+	if entry.IsContext {
+		msg = dim + msg + reset
+	}
+
 	return fmt.Sprintf(
 		"%s%s%s%s %s[%s]%s%s | %s%s%s",
-		dim, tsColor,
+		dim,
+		tsColor,
 		entry.Timestamp.Format(tsFormat),
 		reset,
 
@@ -55,7 +62,7 @@ func (f *Formatter) Format(entry domain.LogEntry) string {
 		padding,
 
 		msgColor,
-		f.formatMessage(entry.Message),
+		msg,
 		reset,
 	)
 }

@@ -10,13 +10,13 @@ import (
 )
 
 type LineProcessor struct {
-	config        *ScanConfig
+	config        *Config
 	timeParser    TimeParser
 	mu            sync.RWMutex
 	timestampKeys map[string]string
 }
 
-func NewLineProcessor(cfg *ScanConfig, tp TimeParser) *LineProcessor {
+func NewLineProcessor(cfg *Config, tp TimeParser) *LineProcessor {
 	return &LineProcessor{
 		config:        cfg,
 		timeParser:    tp,
@@ -38,23 +38,39 @@ func (lp *LineProcessor) ProcessLine(line, service string) (*domain.LogEntry, bo
 	}
 
 	if lp.config.JSONMode {
-		return lp.processJSONLine(line, service)
+		return lp.processJSONLine(line, service, false)
 	}
 
-	line = strings.TrimRight(line, "\r\n")
-	return lp.processTextLine(line, service)
+	return lp.processTextLine(
+		strings.TrimRight(line, "\r\n"),
+		service,
+		false,
+	)
 }
 
-func (lp *LineProcessor) processJSONLine(line string, service string) (*domain.LogEntry, bool) {
+func (lp *LineProcessor) ParseOnly(line, service string) (*domain.LogEntry, bool) {
+	if lp.config.JSONMode {
+		return lp.processJSONLine(line, service, true)
+	}
+	return lp.processTextLine(
+		strings.TrimRight(line, "\r\n"),
+		service,
+		true,
+	)
+}
+
+func (lp *LineProcessor) processJSONLine(line string, service string, skipMatch bool) (*domain.LogEntry, bool) {
 	if !gjson.Valid(line) {
 		return nil, false
 	}
 	obj := gjson.Parse(line)
 
-	foundID, ok := extractJSONField(obj, lp.config.Keys)
-	if !ok || !match(foundID, lp.config.SearchValue, lp.config.IgnoreCase) {
+	if !skipMatch {
+		foundID, ok := extractJSONField(obj, lp.config.Keys)
+		if !ok || !match(foundID, lp.config.SearchValue, lp.config.IgnoreCase) {
 
-		return nil, false
+			return nil, false
+		}
 	}
 
 	tsKey, tsVal, ok := lp.extractJSONTimestampValue(obj, service)
@@ -73,15 +89,17 @@ func (lp *LineProcessor) processJSONLine(line string, service string) (*domain.L
 	}, true
 }
 
-func (lp *LineProcessor) processTextLine(line string, service string) (*domain.LogEntry, bool) {
+func (lp *LineProcessor) processTextLine(line string, service string, skipMatch bool) (*domain.LogEntry, bool) {
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
 		return nil, false
 	}
 
-	foundID, ok := extractTextField(parts, lp.config.Keys)
-	if !ok || !match(foundID, lp.config.SearchValue, lp.config.IgnoreCase) {
-		return nil, false
+	if !skipMatch {
+		foundID, ok := extractTextField(parts, lp.config.Keys)
+		if !ok || !match(foundID, lp.config.SearchValue, lp.config.IgnoreCase) {
+			return nil, false
+		}
 	}
 
 	ts, ok := lp.timeParser.Parse(parts[0], service)

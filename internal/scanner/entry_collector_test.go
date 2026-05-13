@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -30,18 +31,18 @@ func TestNewEntryCollector(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		cfg       *ScanConfig
+		cfg       *Config
 		expectErr bool
 	}{
 		{
 			name: "valid without latest",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Limit: 10,
 			},
 		},
 		{
 			name: "invalid since",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Since: "invalid",
 			},
 			expectErr: true,
@@ -67,7 +68,7 @@ func TestNewEntryCollector(t *testing.T) {
 }
 
 func TestEntryCollector_Add_NoLimit(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit: 0,
 	}
 
@@ -101,7 +102,7 @@ func TestEntryCollector_Add_NoLimit(t *testing.T) {
 }
 
 func TestEntryCollector_Add_DefaultLimit(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit: 2,
 	}
 
@@ -150,7 +151,7 @@ func TestEntryCollector_Add_DefaultLimit(t *testing.T) {
 }
 
 func TestEntryCollector_Add_Latest(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit:  2,
 		Latest: true,
 	}
@@ -187,7 +188,7 @@ func TestEntryCollector_Add_Latest(t *testing.T) {
 func TestEntryCollector_Add_SinceFiltering(t *testing.T) {
 	now := time.Unix(100, 0)
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Since: "10s",
 	}
 
@@ -212,7 +213,7 @@ func TestEntryCollector_Add_SinceFiltering(t *testing.T) {
 }
 
 func TestEntryCollector_Add_NilEntry(t *testing.T) {
-	c, err := NewEntryCollector(&ScanConfig{}, time.Now())
+	c, err := NewEntryCollector(&Config{}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestEntryCollector_Add_NilEntry(t *testing.T) {
 }
 
 func TestEntryCollector_Results_Sorted(t *testing.T) {
-	c, err := NewEntryCollector(&ScanConfig{}, time.Now())
+	c, err := NewEntryCollector(&Config{}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -245,5 +246,99 @@ func TestEntryCollector_Results_Sorted(t *testing.T) {
 		if got[i] != expected[i] {
 			t.Fatalf("expected %v, got %v", expected, got)
 		}
+	}
+}
+
+func TestEntryCollector_Results_WithContextAndLimit(t *testing.T) {
+	cfg := &Config{
+		Limit: 2,
+	}
+
+	c, err := NewEntryCollector(cfg, time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	entries := []domain.LogEntry{
+		{
+			Timestamp: time.Unix(1, 0),
+			Message:   "context-before-1",
+			IsContext: true,
+		},
+		{
+			Timestamp: time.Unix(2, 0),
+			Message:   "match-1",
+		},
+		{
+			Timestamp: time.Unix(3, 0),
+			Message:   "context-between",
+			IsContext: true,
+		},
+		{
+			Timestamp: time.Unix(4, 0),
+			Message:   "match-2",
+		},
+		{
+			Timestamp: time.Unix(5, 0),
+			Message:   "context-after-limit",
+			IsContext: true,
+		},
+	}
+
+	for _, e := range entries {
+		if e.IsContext {
+			c.AddContext(&e)
+		} else {
+			c.Add(&e)
+		}
+	}
+
+	results := c.Results()
+
+	got := make([]string, 0, len(results))
+
+	for _, r := range results {
+		got = append(got, r.Message)
+	}
+
+	expected := []string{
+		"context-before-1",
+		"match-1",
+		"context-between",
+		"match-2",
+		"context-after-limit",
+	}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected %v, got %v", expected, got)
+	}
+}
+
+func TestEntryCollector_AddContext(t *testing.T) {
+	c, err := NewEntryCollector(&Config{}, time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	entry := domain.LogEntry{
+		Timestamp: time.Unix(1, 0),
+		Message:   "context",
+		IsContext: true,
+	}
+
+	c.AddContext(&entry)
+
+	results := c.Results()
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	if !results[0].IsContext {
+		t.Fatalf("expected context entry")
+	}
+
+	if results[0].Message != "context" {
+		t.Fatalf("unexpected message: %q", results[0].Message)
 	}
 }
