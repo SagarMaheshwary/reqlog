@@ -1,12 +1,12 @@
 # Usage Guide
 
-## Basic Syntax
+**Basic Syntax**
 
 ```bash
 reqlog [flags] <search_value>
 ```
 
-## Basic Search
+**Basic Search**
 
 Search logs in a directory:
 
@@ -21,26 +21,26 @@ Default keys searched:
 - trace_id
 - correlation_id
 
-## Key-Based Search (Recommended)
+**Key-Based Search (Recommended)**
 
 ```bash
 reqlog --key request_id abc123
 reqlog --key event_key order.created
 ```
 
-## JSON Logs
+**JSON Logs**
 
 ```bash
 reqlog --dir ./logs --json --key trace_id trace-123
 ```
 
-## Docker Logs
+**Docker Logs**
 
 ```bash
 reqlog --source docker --service api-gateway abc123
 ```
 
-## Service Filtering
+**Service Filtering**
 
 Filter logs by service name.
 
@@ -54,13 +54,13 @@ reqlog \
   abc123
 ```
 
-### Wildcard Support
+**Wildcard Support**
 
 ```bash
 reqlog --service order-service* abc123
 ```
 
-## Context Around Matches
+**Context Around Matches**
 
 Show surrounding log lines before and after each match:
 
@@ -68,7 +68,7 @@ Show surrounding log lines before and after each match:
 reqlog --context 2 --key request_id abc123
 ```
 
-## Limiting Results
+**Limiting Results**
 
 Return first N matches per source:
 
@@ -84,7 +84,7 @@ reqlog --latest --limit 10 --key request_id abc123
 
 > `--latest` scans all matching logs to determine the newest entries globally, so it may be slower on very large log files or containers.
 
-## Time Filtering
+### Time Filtering
 
 `--since` accepts either a Go duration or an absolute timestamp.
 
@@ -122,39 +122,39 @@ Supported absolute timestamp formats:
   - microseconds (16 digits)
   - nanoseconds (19 digits)
 
-## Case-Insensitive Search
+**Case-Insensitive Search**
 
 ```bash
 reqlog --ignore-case --key event_key ORDER.CREATED
 ```
 
-## Follow Mode (Live Logs)
+**Follow Mode (Live Logs)**
 
 ```bash
 reqlog --follow --key request_id abc123
 ```
 
-## Non-Recursive Scan
+**Non-Recursive Scan**
 
 ```bash
 reqlog --recursive=false --dir ./logs abc123
 ```
 
-## Supported Log Formats
+### Supported Log Formats
 
-### Supported Timestamp Formats
+**Supported Timestamp Formats**
 
-- **RFC3339 / ISO-8601**
+- RFC3339 / ISO-8601
   - with or without fractional seconds
-- **Unix timestamps**
+- Unix timestamps
   - seconds (10 digits)
   - milliseconds (13 digits)
   - microseconds (16 digits)
   - nanoseconds (19 digits)
 
-Timestamps are normalized to **millisecond precision** in output (fixed 3 digits).
+Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 
-### Text Logs
+**Text Logs**
 
 - Timestamp must appear as the first field
 - Supports `key=value` fields
@@ -166,7 +166,7 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 1710943200123 request_id=abc123 unix milliseconds
 ```
 
-### JSON Logs
+**JSON Logs**
 
 - One JSON object per line
 - Supported timestamp fields: `time`, `timestamp`, `ts`
