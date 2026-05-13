@@ -20,13 +20,13 @@
 
 ## Installation
 
-### Go Install
+**Go Install**
 
 ```bash
 go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
 ```
 
-### macOS / Linux
+**macOS / Linux**
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
@@ -42,7 +42,7 @@ Verify:
 reqlog --version
 ```
 
-### Windows
+**Windows**
 
 Download from:
 
@@ -89,32 +89,32 @@ Follow a request across services in seconds.
 reqlog [flags] <search_value>
 ```
 
-### Basic Search
+**Basic Search**
 
 ```bash
 reqlog --dir ./logs abc123
 ```
 
-### Key-Based Search (Recommended)
+**Key-Based Search (Recommended)**
 
 ```bash
 reqlog --key request_id abc123
 reqlog --key event_key order.created
 ```
 
-### JSON Logs
+**JSON Logs**
 
 ```bash
 reqlog --dir ./logs --json --key trace_id trace-123
 ```
 
-### Docker Logs
+**Docker Logs**
 
 ```bash
 reqlog --source docker --service api-gateway abc123
 ```
 
-Wildcard support:
+**Wildcard support**
 
 ```bash
 reqlog --service order-service* abc123
@@ -122,7 +122,7 @@ reqlog --service order-service* abc123
 
 > `--service` filters **container names** when using `--source docker`; otherwise, it filters **log file names**.
 
-### Context Around Matches
+**Context Around Matches**
 
 Show surrounding log lines before and after each match:
 
@@ -130,7 +130,7 @@ Show surrounding log lines before and after each match:
 reqlog --context 2 --key request_id abc123
 ```
 
-### Limiting Results
+**Limiting Results**
 
 Return first N matches per source:
 
@@ -144,7 +144,7 @@ Return globally latest N matches across all sources:
 reqlog --latest --limit 10 --key request_id abc123
 ```
 
-### Time Filtering
+**Time Filtering**
 
 ```bash
 reqlog --since 10m --key request_id abc123
@@ -154,7 +154,7 @@ reqlog --since 2026-04-29T14:00:00.123Z --key request_id abc123
 reqlog --since 1710943200 --key request_id abc123
 ```
 
-### Follow Logs (Live)
+**Follow Logs (Live)**
 
 ```bash
 reqlog --follow --key request_id abc123
@@ -189,19 +189,19 @@ reqlog --follow --key request_id abc123
 
 ## Supported Log Formats
 
-### Supported Timestamp Formats
+**Supported Timestamp Formats**
 
-- **RFC3339 / ISO-8601**
+- RFC3339 / ISO-8601
   - with or without fractional seconds
-- **Unix timestamps**
+- Unix timestamps
   - seconds (10 digits)
   - milliseconds (13 digits)
   - microseconds (16 digits)
   - nanoseconds (19 digits)
 
-Timestamps are normalized to **millisecond precision** in output (fixed 3 digits).
+Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 
-### Text Logs
+**Text Logs**
 
 - Timestamp must appear as the first field
 - Supports `key=value` fields
@@ -213,7 +213,7 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 1710943200123 request_id=abc123 unix milliseconds
 ```
 
-### JSON Logs
+**JSON Logs**
 
 - One JSON object per line
 - Supported timestamp fields: `time`, `timestamp`, `ts`
@@ -227,7 +227,7 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 
 ## Roadmap
 
-### Core Features
+**Core Features**
 
 - [x] Flexible timestamp parsing (RFC3339 / RFC3339Nano)
 - [x] Text log parsing (key=value)
@@ -240,12 +240,12 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 - [ ] `--fields` flag for JSON logs
 - [ ] `--output=json` for piping and integrations
 
-### Performance & Scalability
+**Performance & Scalability**
 
 - [ ] Parallel scanning
 - [ ] General performance improvements
 
-### Integrations
+**Integrations**
 
 - [x] File logs
 - [x] Docker logs
