@@ -65,7 +65,7 @@ func TestLineProcessor_ProcessLine_TextMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ScanConfig{
+			cfg := &Config{
 				SearchValue: tt.searchValue,
 				IgnoreCase:  tt.ignoreCase,
 				Keys:        tt.keys,
@@ -162,7 +162,7 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ScanConfig{
+			cfg := &Config{
 				SearchValue: tt.searchValue,
 				IgnoreCase:  tt.ignoreCase,
 				Keys:        tt.keys,
@@ -189,7 +189,7 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 func TestLineProcessor_ParseOnly(t *testing.T) {
 	tests := []struct {
 		name      string
-		cfg       *ScanConfig
+		cfg       *Config
 		line      string
 		service   string
 		wantOK    bool
@@ -199,7 +199,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 	}{
 		{
 			name:    "valid text log",
-			cfg:     &ScanConfig{},
+			cfg:     &Config{},
 			line:    "2024-03-10T12:00:00Z user=999 status=ok",
 			service: "auth",
 			wantOK:  true,
@@ -208,7 +208,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		},
 		{
 			name:      "invalid timestamp",
-			cfg:       &ScanConfig{},
+			cfg:       &Config{},
 			line:      "invalid user=123",
 			service:   "auth",
 			wantOK:    false,
@@ -216,7 +216,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		},
 		{
 			name:      "missing key=value field",
-			cfg:       &ScanConfig{},
+			cfg:       &Config{},
 			line:      "2024-03-10T12:00:00Z",
 			service:   "auth",
 			wantOK:    false,
@@ -224,7 +224,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		},
 		{
 			name: "valid json log",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				JSONMode: true,
 			},
 			line:    `{"time":"2024-03-10T12:00:00Z","user":"999","status":"ok"}`,
@@ -234,7 +234,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		},
 		{
 			name: "invalid json log",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				JSONMode: true,
 			},
 			line:      `{"time":"2024-03-10T12:00:00Z"`,
@@ -244,7 +244,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		},
 		{
 			name: "json missing timestamp",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				JSONMode: true,
 			},
 			line:      `{"user":"123"}`,
@@ -301,7 +301,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 func TestLineProcessor_JSONTimestampKeyCaching(t *testing.T) {
 	tp := NewTimeParser()
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "abc",
 		Keys:        []string{"request_id"},
 		JSONMode:    true,

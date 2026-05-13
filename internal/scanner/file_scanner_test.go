@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func newTestFileScanner(cfg *ScanConfig) *FileScanner {
+func newTestFileScanner(cfg *Config) *FileScanner {
 	lp := NewLineProcessor(cfg, NewTimeParser())
 	return NewFileScanner(lp, time.Second, io.Discard, io.Discard, time.Now())
 }
@@ -34,7 +34,7 @@ func TestFileScanner_Scan(t *testing.T) {
 `
 	writeFile(t, filepath.Join(dir, "auth.log"), []byte(logContent))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Dir:         dir,
 		SearchValue: "123",
 		IgnoreCase:  false,
@@ -75,7 +75,7 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 		newTime + " user=123 status=ok\n"
 	writeFile(t, filepath.Join(dir, "svc.log"), []byte(logContent))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Dir:         dir,
 		SearchValue: "123",
 		Keys:        []string{"user"},
@@ -104,7 +104,7 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	logContent := `2024-03-10T12:00:00Z user=ABC status=ok`
 	writeFile(t, filepath.Join(dir, "svc.log"), []byte(logContent))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Dir:         dir,
 		SearchValue: "abc",
 		Keys:        []string{"user"},
@@ -133,7 +133,7 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "file.txt"), []byte("test"))
 	writeFile(t, filepath.Join(dir, "app.log"), []byte("invalid line"))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Dir:         dir,
 		SearchValue: "123",
 		Keys:        []string{"user"},
@@ -173,7 +173,7 @@ func TestScan_MultiFile_Limit(t *testing.T) {
 2024-03-10T12:00:06Z id=123
 `))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 		Limit:       2,
@@ -208,7 +208,7 @@ func TestScan_MultiFile_Latest(t *testing.T) {
 2024-03-10T12:00:06Z id=123
 `))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 		Limit:       2,
@@ -256,7 +256,7 @@ func TestScan_SkipsFileErrors(t *testing.T) {
 
 	writeFile(t, valid, []byte("2024-03-10T12:00:00Z id=123\n"))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 	}
@@ -278,7 +278,7 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 	file := filepath.Join(dir, "a.log")
 	writeFile(t, file, []byte("2024-03-10T12:00:00Z id=123")) // no newline
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"id"},
 	}
@@ -295,7 +295,7 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 }
 
 func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
@@ -328,7 +328,7 @@ func TestFileScanner_Scan_InvalidSince(t *testing.T) {
 	logContent := `2024-03-10T12:00:00Z user=ABC status=ok`
 	writeFile(t, filepath.Join(dir, "svc.log"), []byte(logContent))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Dir:         dir,
 		SearchValue: "abc",
 		Keys:        []string{"user"},
@@ -376,7 +376,7 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 			content := strings.Join(tt.logLines, "\n")
 			writeFile(t, filepath.Join(dir, "svc.log"), []byte(content))
 
-			cfg := &ScanConfig{
+			cfg := &Config{
 				Dir:         dir,
 				SearchValue: "123",
 				Keys:        []string{"user"},
@@ -422,7 +422,7 @@ func TestFileScanner_ContextWindow_BeforeAndAfter(t *testing.T) {
 			"2024-03-10T12:00:05Z user=123\n", // must NOT be processed
 	))
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 		Context:     2,
@@ -458,7 +458,7 @@ func TestListSources(t *testing.T) {
 	tests := []struct {
 		name      string
 		setup     func(dir string)
-		cfg       *ScanConfig
+		cfg       *Config
 		wantFiles func(dir string) []string
 	}{
 		{
@@ -470,7 +470,7 @@ func TestListSources(t *testing.T) {
 				os.Mkdir(filepath.Join(dir, "sub-dir"), 0755)
 				writeFile(t, filepath.Join(dir, "sub-dir", "svc.log"), []byte(""))
 			},
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Services: []string{},
 			},
 			wantFiles: func(dir string) []string {
@@ -487,7 +487,7 @@ func TestListSources(t *testing.T) {
 				writeFile(t, filepath.Join(dir, "sub-dir", "svc.log"), []byte(""))
 				writeFile(t, filepath.Join(dir, "sub-dir", "non-log-file"), []byte(""))
 			},
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Services:  []string{"svc"},
 				Recursive: true,
 			},
@@ -501,7 +501,7 @@ func TestListSources(t *testing.T) {
 				writeFile(t, filepath.Join(dir, "auth.log"), []byte(""))
 				writeFile(t, filepath.Join(dir, "db.log"), []byte(""))
 			},
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Services: []string{"auth", " "}, //skip empty strings
 			},
 			wantFiles: func(dir string) []string {
@@ -514,7 +514,7 @@ func TestListSources(t *testing.T) {
 				writeFile(t, filepath.Join(dir, "svc.log"), []byte(""))
 				writeFile(t, filepath.Join(dir, "svc-1.log"), []byte(""))
 			},
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Services:  []string{"svc*"},
 				Recursive: true,
 			},
@@ -607,7 +607,7 @@ func TestFileScanner_Follow(t *testing.T) {
 
 			var out bytes.Buffer
 
-			cfg := &ScanConfig{SearchValue: "123", Keys: []string{"user"}}
+			cfg := &Config{SearchValue: "123", Keys: []string{"user"}}
 			lp := NewLineProcessor(cfg, NewTimeParser())
 			fs := NewFileScanner(lp, 10*time.Millisecond, &out, io.Discard, time.Now())
 
@@ -643,7 +643,7 @@ func TestFileScanner_Follow(t *testing.T) {
 }
 
 func TestFileScanner_Follow_Errors(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}

@@ -74,7 +74,7 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		cfg := &ScanConfig{
+		cfg := &Config{
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
@@ -107,7 +107,7 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		cfg := &ScanConfig{
+		cfg := &Config{
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,

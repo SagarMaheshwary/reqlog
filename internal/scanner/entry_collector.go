@@ -9,7 +9,7 @@ import (
 )
 
 type EntryCollector struct {
-	cfg       *ScanConfig
+	cfg       *Config
 	sinceTime time.Time
 	results   []domain.LogEntry
 	heap      entryHeap
@@ -17,7 +17,7 @@ type EntryCollector struct {
 	sourceCount int
 }
 
-func NewEntryCollector(cfg *ScanConfig, now time.Time) (*EntryCollector, error) {
+func NewEntryCollector(cfg *Config, now time.Time) (*EntryCollector, error) {
 	sinceTime, err := parseSince(cfg.Since, now)
 	if err != nil {
 		return nil, err

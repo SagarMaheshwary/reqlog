@@ -31,18 +31,18 @@ func TestNewEntryCollector(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		cfg       *ScanConfig
+		cfg       *Config
 		expectErr bool
 	}{
 		{
 			name: "valid without latest",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Limit: 10,
 			},
 		},
 		{
 			name: "invalid since",
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Since: "invalid",
 			},
 			expectErr: true,
@@ -68,7 +68,7 @@ func TestNewEntryCollector(t *testing.T) {
 }
 
 func TestEntryCollector_Add_NoLimit(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit: 0,
 	}
 
@@ -102,7 +102,7 @@ func TestEntryCollector_Add_NoLimit(t *testing.T) {
 }
 
 func TestEntryCollector_Add_DefaultLimit(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit: 2,
 	}
 
@@ -151,7 +151,7 @@ func TestEntryCollector_Add_DefaultLimit(t *testing.T) {
 }
 
 func TestEntryCollector_Add_Latest(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit:  2,
 		Latest: true,
 	}
@@ -188,7 +188,7 @@ func TestEntryCollector_Add_Latest(t *testing.T) {
 func TestEntryCollector_Add_SinceFiltering(t *testing.T) {
 	now := time.Unix(100, 0)
 
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Since: "10s",
 	}
 
@@ -213,7 +213,7 @@ func TestEntryCollector_Add_SinceFiltering(t *testing.T) {
 }
 
 func TestEntryCollector_Add_NilEntry(t *testing.T) {
-	c, err := NewEntryCollector(&ScanConfig{}, time.Now())
+	c, err := NewEntryCollector(&Config{}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestEntryCollector_Add_NilEntry(t *testing.T) {
 }
 
 func TestEntryCollector_Results_Sorted(t *testing.T) {
-	c, err := NewEntryCollector(&ScanConfig{}, time.Now())
+	c, err := NewEntryCollector(&Config{}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestEntryCollector_Results_Sorted(t *testing.T) {
 }
 
 func TestEntryCollector_Results_WithContextAndLimit(t *testing.T) {
-	cfg := &ScanConfig{
+	cfg := &Config{
 		Limit: 2,
 	}
 
@@ -315,7 +315,7 @@ func TestEntryCollector_Results_WithContextAndLimit(t *testing.T) {
 }
 
 func TestEntryCollector_AddContext(t *testing.T) {
-	c, err := NewEntryCollector(&ScanConfig{}, time.Now())
+	c, err := NewEntryCollector(&Config{}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

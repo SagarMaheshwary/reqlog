@@ -111,7 +111,7 @@ func main() {
 		log.Fatal("--latest requires --limit")
 	}
 
-	cfg := &scanner.ScanConfig{
+	cfg := &scanner.Config{
 		Dir:         *dir,
 		SearchValue: SearchValue,
 		IgnoreCase:  *ignoreCase,

@@ -10,13 +10,13 @@ import (
 )
 
 type LineProcessor struct {
-	config        *ScanConfig
+	config        *Config
 	timeParser    TimeParser
 	mu            sync.RWMutex
 	timestampKeys map[string]string
 }
 
-func NewLineProcessor(cfg *ScanConfig, tp TimeParser) *LineProcessor {
+func NewLineProcessor(cfg *Config, tp TimeParser) *LineProcessor {
 	return &LineProcessor{
 		config:        cfg,
 		timeParser:    tp,

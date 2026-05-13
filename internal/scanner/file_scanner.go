@@ -14,20 +14,6 @@ import (
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 )
 
-type ScanConfig struct {
-	Dir         string
-	SearchValue string
-	IgnoreCase  bool
-	Keys        []string
-	Since       string
-	Limit       int
-	Recursive   bool
-	Services    []string
-	JSONMode    bool
-	Latest      bool
-	Context     int
-}
-
 type FileScanner struct {
 	offsets        map[string]int64
 	lineProcessor  *LineProcessor

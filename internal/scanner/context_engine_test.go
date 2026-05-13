@@ -12,7 +12,7 @@ func TestContextEngine_Handle(t *testing.T) {
 	tests := []struct {
 		name             string
 		contextSize      int
-		cfg              *ScanConfig
+		cfg              *Config
 		inputs           []ContextLine
 		expectedMessages []string
 		expectedContext  []bool
@@ -21,7 +21,7 @@ func TestContextEngine_Handle(t *testing.T) {
 		{
 			name:        "no context mode only collects matches",
 			contextSize: 0,
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Limit: 10,
 			},
 			inputs: []ContextLine{
@@ -55,7 +55,7 @@ func TestContextEngine_Handle(t *testing.T) {
 		{
 			name:        "before and after context",
 			contextSize: 1,
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Limit:       10,
 				Keys:        []string{"user"},
 				Context:     1,
@@ -102,7 +102,7 @@ func TestContextEngine_Handle(t *testing.T) {
 		{
 			name:        "stops after trailing context exhausted",
 			contextSize: 1,
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Limit:   1,
 				Keys:    []string{"user"},
 				Context: 1,
@@ -138,7 +138,7 @@ func TestContextEngine_Handle(t *testing.T) {
 		{
 			name:        "invalid context line is skipped",
 			contextSize: 1,
-			cfg: &ScanConfig{
+			cfg: &Config{
 				Limit:   10,
 				Keys:    []string{"user"},
 				Context: 1,
