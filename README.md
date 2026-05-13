@@ -18,52 +18,6 @@
 
 ![reqlog demo](./assets/demo.gif)
 
-## Why `reqlog`?
-
-Debugging logs in microservices usually means:
-
-- jumping between multiple files
-- dealing with inconsistent formats
-- writing fragile `grep | awk | sort` pipelines
-
-**`reqlog` fixes this in one command.**
-
-- Search logs across **multiple services**
-- Match **structured fields** like `request_id`, `trace_id`
-- Get a **chronological flow** of a request
-- Visually scan logs with **service-based colors**
-
-> Companion web UI for reqlog: https://github.com/sagarmaheshwary/reqlog-ui
-
-## Quick Start
-
-```bash
-reqlog --dir ./logs --key request_id abc123
-```
-
-Example output:
-
-```shell
-2026-03-20T14:10:00.000Z [api-gateway]    | start request
-2026-03-20T14:10:01.000Z [order-service]  | fetching order
-2026-03-20T14:10:02.000Z [inventory]      | checking stock
-```
-
-Follow a request across services in seconds.
-
-## Features
-
-- Key-based search (`--key request_id`)
-- Fast scanning (millions of lines)
-- Supports **plain text** + **JSON logs**
-- Docker logs support
-- Filter by service (`--service`, supports wildcards)
-- Time filtering (`--since`)
-- Colored output by service
-- Live tailing (`--follow`)
-- Case-insensitive search
-- Works across multiple files & directories
-
 ## Installation
 
 ### Go Install
@@ -105,6 +59,30 @@ Verify:
 reqlog --version
 ```
 
+## Quick Start
+
+Search log files:
+
+```bash
+reqlog --dir ./logs --key request_id abc123
+```
+
+Search Docker containers:
+
+```bash
+reqlog --source docker --key request_id abc123
+```
+
+Example output:
+
+```shell
+2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
+2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
+2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
+```
+
+Follow a request across services in seconds.
+
 ## Usage
 
 ```bash
@@ -144,6 +122,28 @@ reqlog --service order-service* abc123
 
 > `--service` filters **container names** when using `--source docker`; otherwise, it filters **log file names**.
 
+### Context Around Matches
+
+Show surrounding log lines before and after each match:
+
+```bash
+reqlog --context 2 --key request_id abc123
+```
+
+### Limiting Results
+
+Return first N matches per source:
+
+```bash
+reqlog --limit 10 --key request_id abc123
+```
+
+Return globally latest N matches across all sources:
+
+```bash
+reqlog --latest --limit 10 --key request_id abc123
+```
+
 ### Time Filtering
 
 ```bash
@@ -174,13 +174,18 @@ reqlog --follow --key request_id abc123
 
 `reqlog = grep for distributed systems`
 
-## Performance
+## Features
 
-- ~9.6M lines scanned in **~2 seconds**
-- ~9 MB memory usage
-- Works efficiently on real-world datasets
-
-> Optimized for sequential reads + minimal memory usage
+- Key-based search (`--key request_id`)
+- Optimized for large log files
+- Supports **plain text** + **JSON logs**
+- Docker logs support
+- Filter by service (`--service`, supports wildcards)
+- Time filtering (`--since`)
+- Colored output by service
+- Live tailing (`--follow`)
+- Case-insensitive search
+- Works across multiple files & directories
 
 ## Supported Log Formats
 
@@ -229,8 +234,9 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 - [x] JSON log parsing
 - [x] Wildcard support in `--service` (e.g. order-service\*)
 - [x] Unix timestamp support (logs + `--since`)
-- [ ] Optimize `--limit` (early exit / streaming)
-- [ ] `--context` flag (show surrounding lines)
+- [x] Optimize `--limit` (early exit / streaming)
+- [x] `--latest` flag (Return latest N entries globally)
+- [x] `--context` flag (show surrounding lines)
 - [ ] `--fields` flag for JSON logs
 - [ ] `--output=json` for piping and integrations
 
@@ -245,9 +251,14 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 - [x] Docker logs
 - [ ] Kubernetes logs
 
-## Contributing
+> Companion web UI for reqlog: https://github.com/sagarmaheshwary/reqlog-ui
 
-Contributions and feedback are welcome!
+## Support & Contributions
+
+If you find this project useful, consider giving it a ⭐ — it helps others discover it.
+
+Feedback, contributions, and discussions are very welcome.
+Feel free to open an issue or submit a PR.
 
 ## License
 

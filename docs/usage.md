@@ -60,6 +60,30 @@ reqlog \
 reqlog --service order-service* abc123
 ```
 
+## Context Around Matches
+
+Show surrounding log lines before and after each match:
+
+```bash
+reqlog --context 2 --key request_id abc123
+```
+
+## Limiting Results
+
+Return first N matches per source:
+
+```bash
+reqlog --limit 10 --key request_id abc123
+```
+
+Return globally latest N matches across all sources:
+
+```bash
+reqlog --latest --limit 10 --key request_id abc123
+```
+
+> `--latest` scans all matching logs to determine the newest entries globally, so it may be slower on very large log files or containers.
+
 ## Time Filtering
 
 `--since` accepts either a Go duration or an absolute timestamp.
@@ -98,12 +122,6 @@ Supported absolute timestamp formats:
   - microseconds (16 digits)
   - nanoseconds (19 digits)
 
-## Limit Results
-
-```bash
-reqlog --limit 20 --key event_key order.created
-```
-
 ## Case-Insensitive Search
 
 ```bash
@@ -120,14 +138,6 @@ reqlog --follow --key request_id abc123
 
 ```bash
 reqlog --recursive=false --dir ./logs abc123
-```
-
-## Example Output
-
-```shell
-2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
-2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
-2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
 ```
 
 ## Supported Log Formats
@@ -170,7 +180,6 @@ Timestamps are normalized to **millisecond precision** in output (fixed 3 digits
 
 ## Limitations
 
-- No support for numeric timestamps (epoch) yet
 - No multi-line logs
 
 ## Tips
