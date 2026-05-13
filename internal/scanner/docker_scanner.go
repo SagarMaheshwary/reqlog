@@ -55,17 +55,19 @@ func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
 		func() {
 			defer reader.Close()
 			collector.StartSource()
+			engine := NewContextEngine(ds.lineProcessor, collector, cfg.Context)
 
 			scanner := bufio.NewScanner(reader)
 			for scanner.Scan() {
 				line := scanner.Text()
 
 				entry, ok := ds.lineProcessor.ProcessLine(line, container)
-				if !ok {
-					continue
-				}
-
-				continueReading := collector.Add(entry)
+				continueReading := engine.Handle(ContextLine{
+					Line:    line,
+					Service: container,
+					Entry:   entry,
+					IsMatch: ok,
+				})
 				if !continueReading {
 					break
 				}

@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -245,5 +246,99 @@ func TestEntryCollector_Results_Sorted(t *testing.T) {
 		if got[i] != expected[i] {
 			t.Fatalf("expected %v, got %v", expected, got)
 		}
+	}
+}
+
+func TestEntryCollector_Results_WithContextAndLimit(t *testing.T) {
+	cfg := &ScanConfig{
+		Limit: 2,
+	}
+
+	c, err := NewEntryCollector(cfg, time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	entries := []domain.LogEntry{
+		{
+			Timestamp: time.Unix(1, 0),
+			Message:   "context-before-1",
+			IsContext: true,
+		},
+		{
+			Timestamp: time.Unix(2, 0),
+			Message:   "match-1",
+		},
+		{
+			Timestamp: time.Unix(3, 0),
+			Message:   "context-between",
+			IsContext: true,
+		},
+		{
+			Timestamp: time.Unix(4, 0),
+			Message:   "match-2",
+		},
+		{
+			Timestamp: time.Unix(5, 0),
+			Message:   "context-after-limit",
+			IsContext: true,
+		},
+	}
+
+	for _, e := range entries {
+		if e.IsContext {
+			c.AddContext(&e)
+		} else {
+			c.Add(&e)
+		}
+	}
+
+	results := c.Results()
+
+	got := make([]string, 0, len(results))
+
+	for _, r := range results {
+		got = append(got, r.Message)
+	}
+
+	expected := []string{
+		"context-before-1",
+		"match-1",
+		"context-between",
+		"match-2",
+		"context-after-limit",
+	}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected %v, got %v", expected, got)
+	}
+}
+
+func TestEntryCollector_AddContext(t *testing.T) {
+	c, err := NewEntryCollector(&ScanConfig{}, time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	entry := domain.LogEntry{
+		Timestamp: time.Unix(1, 0),
+		Message:   "context",
+		IsContext: true,
+	}
+
+	c.AddContext(&entry)
+
+	results := c.Results()
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	if !results[0].IsContext {
+		t.Fatalf("expected context entry")
+	}
+
+	if results[0].Message != "context" {
+		t.Fatalf("unexpected message: %q", results[0].Message)
 	}
 }

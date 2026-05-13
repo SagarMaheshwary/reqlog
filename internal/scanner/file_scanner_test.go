@@ -403,6 +403,57 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 	}
 }
 
+func TestFileScanner_ContextWindow_BeforeAndAfter(t *testing.T) {
+	dir := t.TempDir()
+
+	file := filepath.Join(dir, "svc.log")
+
+	// Structure:
+	// lines 1-2 -> context before match
+	// line 3    -> match (triggers window)
+	// line 4-5  -> after-context (must be included)
+	// line 6    -> should NOT be processed (stop after context)
+	writeFile(t, file, []byte(
+		"2024-03-10T12:00:00Z user=ignore\n"+ // before
+			"2024-03-10T12:00:01Z user=123\n"+ // before
+			"2024-03-10T12:00:02Z user=123\n"+ // match
+			"2024-03-10T12:00:03Z user=ignore\n"+ // after-context
+			"2024-03-10T12:00:04Z user=ignore\n"+ // after-context
+			"2024-03-10T12:00:05Z user=123\n", // must NOT be processed
+	))
+
+	cfg := &ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+		Context:     2,
+		Limit:       1,
+	}
+
+	fs := newTestFileScanner(cfg)
+
+	results, err := fs.Scan([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := make([]string, 0, len(results))
+	for _, r := range results {
+		got = append(got, r.Message)
+	}
+
+	expected := []string{
+		"user=ignore", // before buffer
+		"user=123",    // match 1
+
+		"user=123",    // match 2 (NOT context)
+		"user=ignore", // after-context of match 2
+	}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected %v, got %v", expected, got)
+	}
+}
+
 func TestListSources(t *testing.T) {
 	tests := []struct {
 		name      string

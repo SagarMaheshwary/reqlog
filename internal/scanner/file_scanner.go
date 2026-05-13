@@ -25,6 +25,7 @@ type ScanConfig struct {
 	Services    []string
 	JSONMode    bool
 	Latest      bool
+	Context     int
 }
 
 type FileScanner struct {
@@ -76,6 +77,8 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 			reader := bufio.NewReader(file)
 			var offset int64 = 0
 
+			engine := NewContextEngine(fs.lineProcessor, collector, cfg.Context)
+
 			for {
 				line, err := reader.ReadString('\n')
 
@@ -83,11 +86,12 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 					offset += int64(len(line))
 
 					entry, ok := fs.lineProcessor.ProcessLine(line, service)
-					if !ok {
-						continue
-					}
-
-					continueReading := collector.Add(entry)
+					continueReading := engine.Handle(ContextLine{
+						Line:    line,
+						Service: service,
+						Entry:   entry,
+						IsMatch: ok,
+					})
 					if !continueReading {
 						break
 					}

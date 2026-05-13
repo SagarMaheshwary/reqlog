@@ -76,17 +76,42 @@ func (c *EntryCollector) Add(entry *domain.LogEntry) bool {
 	return c.sourceCount < c.cfg.Limit
 }
 
+func (c *EntryCollector) AddContext(entry *domain.LogEntry) {
+	c.results = append(c.results, *entry)
+}
+
 func (c *EntryCollector) Results() []domain.LogEntry {
 	if c.cfg.Limit > 0 && c.cfg.Latest {
 		c.results = drainHeap(&c.heap)
 	}
 
-	sort.Slice(c.results, func(i, j int) bool {
+	sort.SliceStable(c.results, func(i, j int) bool {
 		return c.results[i].Timestamp.Before(c.results[j].Timestamp)
 	})
 
-	if c.cfg.Limit > 0 && !c.cfg.Latest && len(c.results) > c.cfg.Limit {
-		c.results = c.results[len(c.results)-c.cfg.Limit:]
+	if c.cfg.Limit > 0 {
+		res := make([]domain.LogEntry, 0, c.cfg.Limit)
+		matchedCount := 0
+		allowContext := true
+
+		for _, e := range c.results {
+			if e.IsContext {
+				if allowContext {
+					res = append(res, e)
+				}
+				continue
+			}
+
+			if matchedCount < c.cfg.Limit {
+				res = append(res, e)
+				matchedCount++
+				continue
+			}
+
+			allowContext = false
+		}
+
+		return res
 	}
 
 	return c.results

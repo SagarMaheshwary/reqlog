@@ -240,3 +240,35 @@ func TestSortKVByPriority(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatter_Format_ContextEntry(t *testing.T) {
+	f := NewFormatter(nil, nil)
+
+	entry := domain.LogEntry{
+		Timestamp: mustParseTime(t, "2024-03-10T12:00:00Z"),
+		Service:   "auth",
+		Message:   "user=123 status=ok",
+		IsContext: true,
+	}
+
+	got := f.Format(entry)
+
+	if !strings.Contains(got, dim) {
+		t.Fatalf("expected formatted output to contain dim ANSI code, got %q", got)
+	}
+
+	if !strings.Contains(got, "user") {
+		t.Fatalf("expected formatted output to contain message fields, got %q", got)
+	}
+}
+
+func mustParseTime(t *testing.T, s string) time.Time {
+	t.Helper()
+
+	ts, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return ts
+}

@@ -288,6 +288,93 @@ func TestDockerScanner_Scan_Latest(t *testing.T) {
 	}
 }
 
+func TestDockerScanner_Scan_Context(t *testing.T) {
+	mock := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			return dockerLogs([]string{
+				"2024-03-10T12:00:00Z user=ignore",
+				"2024-03-10T12:00:01Z user=123",
+				"2024-03-10T12:00:02Z user=ignore",
+				"2024-03-10T12:00:03Z user=ignore",
+				"2024-03-10T12:00:04Z user=123", // should not be processed
+			}), nil
+		},
+		listFn: func() ([]string, error) {
+			return []string{"auth"}, nil
+		},
+	}
+
+	cfg := &ScanConfig{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+		Context:     2,
+		Limit:       1,
+	}
+
+	lp := NewLineProcessor(cfg, NewTimeParser())
+
+	var out, errOut bytes.Buffer
+
+	ds := NewDockerScanner(
+		lp,
+		mock,
+		&out,
+		&errOut,
+		time.Now(),
+	)
+
+	results, err := ds.Scan([]string{"auth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
+	}
+
+	expected := []struct {
+		message   string
+		isContext bool
+	}{
+		{
+			message:   "user=ignore",
+			isContext: true,
+		},
+		{
+			message:   "user=123",
+			isContext: false,
+		},
+		{
+			message:   "user=ignore",
+			isContext: true,
+		},
+		{
+			message:   "user=ignore",
+			isContext: true,
+		},
+	}
+
+	for i, exp := range expected {
+		if results[i].Message != exp.message {
+			t.Fatalf(
+				"result[%d]: expected message %q, got %q",
+				i,
+				exp.message,
+				results[i].Message,
+			)
+		}
+
+		if results[i].IsContext != exp.isContext {
+			t.Fatalf(
+				"result[%d]: expected IsContext=%v, got %v",
+				i,
+				exp.isContext,
+				results[i].IsContext,
+			)
+		}
+	}
+}
+
 func TestDockerScanner_ListSources(t *testing.T) {
 	tests := []struct {
 		name       string
