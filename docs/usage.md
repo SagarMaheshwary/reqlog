@@ -1,12 +1,12 @@
 # Usage Guide
 
-**Basic Syntax**
+### Basic Syntax
 
 ```bash
 reqlog [flags] <search_value>
 ```
 
-**Basic Search**
+### Basic Search
 
 Search logs in a directory:
 
@@ -14,33 +14,35 @@ Search logs in a directory:
 reqlog --dir ./logs abc123
 ```
 
+> If `--dir` is not provided, reqlog searches logs in `./logs` by default.
+
 Default keys searched:
 
-- request_id
-- req_id
-- trace_id
-- correlation_id
+- `request_id`
+- `req_id`
+- `trace_id`
+- `correlation_id`
 
-**Key-Based Search (Recommended)**
+### Key-Based Search (Recommended)
 
 ```bash
 reqlog --key request_id abc123
 reqlog --key event_key order.created
 ```
 
-**JSON Logs**
+### JSON Logs
 
 ```bash
 reqlog --dir ./logs --json --key trace_id trace-123
 ```
 
-**Docker Logs**
+### Docker Logs
 
 ```bash
 reqlog --source docker --service api-gateway abc123
 ```
 
-**Service Filtering**
+### Service Filtering
 
 Filter logs by service name.
 
@@ -60,7 +62,7 @@ reqlog \
 reqlog --service order-service* abc123
 ```
 
-**Context Around Matches**
+### Context Around Matches
 
 Show surrounding log lines before and after each match:
 
@@ -68,7 +70,7 @@ Show surrounding log lines before and after each match:
 reqlog --context 2 --key request_id abc123
 ```
 
-**Limiting Results**
+### Limiting Results
 
 Return first N matches per source:
 
@@ -122,19 +124,40 @@ Supported absolute timestamp formats:
   - microseconds (16 digits)
   - nanoseconds (19 digits)
 
-**Case-Insensitive Search**
+### Case-Insensitive Search
 
 ```bash
 reqlog --ignore-case --key event_key ORDER.CREATED
 ```
 
-**Follow Mode (Live Logs)**
+### JSON Output
+
+Structured output for piping and integrations:
+
+```bash
+reqlog --output json --key request_id abc123
+reqlog --output json --key request_id abc123 | jq .
+```
+
+Output structure:
+
+```json
+{
+  "timestamp": "2026-03-20T14:00:05Z",
+  "service": "order-service",
+  "message": "request started",
+  "level": "info",
+  "request_id": "abc123"
+}
+```
+
+### Follow Mode (Live Logs)
 
 ```bash
 reqlog --follow --key request_id abc123
 ```
 
-**Non-Recursive Scan**
+### Non-Recursive Scan
 
 ```bash
 reqlog --recursive=false --dir ./logs abc123
@@ -177,10 +200,6 @@ Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 { "ts": 1710943200, "request_id": "abc", "message": "unix seconds" }
 { "ts": 1710943200123, "request_id": "abc", "message": "unix milliseconds" }
 ```
-
-## Limitations
-
-- No multi-line logs
 
 ## Tips
 
