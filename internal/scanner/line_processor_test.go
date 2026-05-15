@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -200,10 +202,10 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		{
 			name:    "valid text log",
 			cfg:     &Config{},
-			line:    "2024-03-10T12:00:00Z user=999 status=ok",
+			line:    "2024-03-10T12:00:00Z some message user=999 status=ok",
 			service: "auth",
 			wantOK:  true,
-			wantMsg: "user=999 status=ok",
+			wantMsg: "some message",
 			wantSvc: "auth",
 		},
 		{
@@ -525,104 +527,264 @@ func TestStripQuotes(t *testing.T) {
 	}
 }
 
-func TestBuildJSONMessage(t *testing.T) {
+func TestExtractJSONFields(t *testing.T) {
+	MessageKeys = map[string]struct{}{
+		"msg":     {},
+		"message": {},
+	}
+
 	tests := []struct {
-		name   string
-		json   string
-		tsKey  string
-		expect string
+		name        string
+		input       string
+		tsKey       string
+		wantMessage string
+		wantFields  map[string]any
 	}{
 		{
-			name:   "exclude timestamp",
-			json:   `{"timestamp":"1","a":"x","b":"y"}`,
-			tsKey:  "timestamp",
-			expect: "a=x b=y",
+			name: "basic fields with message",
+			input: `{
+				"ts": "2024-03-10T12:00:00Z",
+				"level": "info",
+				"msg": "hello world",
+				"user": "123"
+			}`,
+			tsKey:       "ts",
+			wantMessage: "hello world",
+			wantFields: map[string]any{
+				"level": "info",
+				"user":  "123",
+			},
 		},
 		{
-			name:   "sorted output",
-			json:   `{"b":"y","a":"x"}`,
-			tsKey:  "timestamp",
-			expect: "a=x b=y",
+			name: "number and boolean parsing",
+			input: `{
+				"ts": "2024-03-10T12:00:00Z",
+				"count": 42,
+				"ok": true,
+				"msg": "done"
+			}`,
+			tsKey:       "ts",
+			wantMessage: "done",
+			wantFields: map[string]any{
+				"count": float64(42),
+				"ok":    true,
+			},
 		},
 		{
-			name:   "non-string values use raw",
-			json:   `{"a":1,"b":true}`,
-			tsKey:  "timestamp",
-			expect: "a=1 b=true",
+			name: "null and nested json",
+			input: `{
+				"ts": "2024-03-10T12:00:00Z",
+				"data": {"a": 1},
+				"extra": null
+			}`,
+			tsKey:       "ts",
+			wantMessage: "",
+			wantFields: map[string]any{
+				"data": map[string]any{
+					"a": float64(1),
+				},
+				"extra": nil,
+			},
+		},
+		{
+			name: "array parsing",
+			input: `{
+				"ts": "2024-03-10T12:00:00Z",
+				"tags": ["a", "b"]
+			}`,
+			tsKey: "ts",
+			wantFields: map[string]any{
+				"tags": []any{"a", "b"},
+			},
+		},
+		{
+			name: "timestamp key excluded",
+			input: `{
+				"ts": "2024-03-10T12:00:00Z",
+				"user": "123"
+			}`,
+			tsKey: "ts",
+			wantFields: map[string]any{
+				"user": "123",
+			},
+		},
+		{
+			name: "message only once (first match wins)",
+			input: `{
+				"ts": "2024-03-10T12:00:00Z",
+				"msg": "first",
+				"message": "second",
+				"user": "123"
+			}`,
+			tsKey:       "ts",
+			wantMessage: "first",
+			wantFields: map[string]any{
+				"user": "123",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			obj := gjson.Parse(tt.json)
+			obj := gjson.Parse(tt.input)
 
-			msg := buildJSONMessage(obj, tt.tsKey)
+			got := extractJSONFields(obj, tt.tsKey)
 
-			if msg != tt.expect {
-				t.Fatalf("expected %s, got %s", tt.expect, msg)
+			if got.Message != tt.wantMessage {
+				t.Fatalf("message: expected %q got %q", tt.wantMessage, got.Message)
+			}
+
+			if len(got.Fields) != len(tt.wantFields) {
+				t.Fatalf("fields length: expected %d got %d", len(tt.wantFields), len(got.Fields))
+			}
+
+			for k, v := range tt.wantFields {
+				gv, ok := got.Fields[k]
+				if !ok {
+					t.Fatalf("missing field %q", k)
+				}
+
+				// deep compare JSON-safe values
+				gotB, _ := json.Marshal(gv)
+				wantB, _ := json.Marshal(v)
+
+				if string(gotB) != string(wantB) {
+					t.Fatalf("field %q: expected %v got %v", k, v, gv)
+				}
 			}
 		})
 	}
 }
 
-func TestFormatJSONField(t *testing.T) {
+func TestExtractTextFields(t *testing.T) {
 	tests := []struct {
-		name     string
-		json     string
-		key      string
-		expected string
+		name  string
+		input []string
+		want  ParsedFields
 	}{
 		{
-			name:     "string value",
-			json:     `{"a":"x"}`,
-			key:      "a",
-			expected: "a=x",
+			name: "fields first then message",
+			input: []string{
+				"level=info",
+				"request_id=abc123",
+				"start",
+				"request",
+			},
+			want: ParsedFields{
+				Fields: map[string]any{
+					"level":      "info",
+					"request_id": "abc123",
+				},
+				Message: "start request",
+			},
 		},
 		{
-			name:     "number value",
-			json:     `{"a":1}`,
-			key:      "a",
-			expected: "a=1",
+			name: "message first then fields",
+			input: []string{
+				"start",
+				"request",
+				"level=info",
+				"request_id=abc123",
+			},
+			want: ParsedFields{
+				Fields: map[string]any{
+					"level":      "info",
+					"request_id": "abc123",
+				},
+				Message: "start request",
+			},
 		},
 		{
-			name:     "bool value",
-			json:     `{"a":true}`,
-			key:      "a",
-			expected: "a=true",
+			name: "mixed ordering",
+			input: []string{
+				"start",
+				"level=info",
+				"request",
+				"request_id=abc123",
+			},
+			want: ParsedFields{
+				Fields: map[string]any{
+					"level":      "info",
+					"request_id": "abc123",
+				},
+				Message: "start request",
+			},
+		},
+		{
+			name: "typed values",
+			input: []string{
+				"ok=true",
+				"count=10",
+				"rate=1.5",
+				"done",
+			},
+			want: ParsedFields{
+				Fields: map[string]any{
+					"ok":    true,
+					"count": int64(10),
+					"rate":  1.5,
+				},
+				Message: "done",
+			},
+		},
+		{
+			name: "no fields only message",
+			input: []string{
+				"hello",
+				"world",
+			},
+			want: ParsedFields{
+				Fields:  map[string]any{},
+				Message: "hello world",
+			},
+		},
+		{
+			name: "no message only fields",
+			input: []string{
+				"level=info",
+				"request_id=abc123",
+			},
+			want: ParsedFields{
+				Fields: map[string]any{
+					"level":      "info",
+					"request_id": "abc123",
+				},
+				Message: "",
+			},
+		},
+		{
+			name:  "empty input",
+			input: []string{},
+			want: ParsedFields{
+				Fields:  map[string]any{},
+				Message: "",
+			},
+		},
+		{
+			name: "value with equals ignored split safety",
+			input: []string{
+				"query=a=b=c",
+				"run",
+			},
+			want: ParsedFields{
+				Fields: map[string]any{
+					"query": "a=b=c",
+				},
+				Message: "run",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			obj := gjson.Parse(tt.json)
-			val := obj.Get(tt.key)
+			got := extractTextFields(tt.input)
 
-			got := formatJSONField(tt.key, val)
-
-			if got != tt.expected {
-				t.Fatalf("expected %s, got %s", tt.expected, got)
+			if !reflect.DeepEqual(got.Fields, tt.want.Fields) {
+				t.Fatalf("fields mismatch\nwant: %+v\ngot:  %+v", tt.want.Fields, got.Fields)
 			}
-		})
-	}
-}
 
-func TestExtractTextMessage(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"ts message here", "message here"},
-		{"ts    message here", "message here"},
-		{"singlefield", ""},
-		{"ts ", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := extractTextMessage(tt.input)
-
-			if got != tt.expected {
-				t.Fatalf("expected %q, got %q", tt.expected, got)
+			if got.Message != tt.want.Message {
+				t.Fatalf("message mismatch\nwant: %q\ngot:  %q", tt.want.Message, got.Message)
 			}
 		})
 	}

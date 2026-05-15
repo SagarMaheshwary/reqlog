@@ -26,9 +26,10 @@ var (
 	since       = flag.String("since", "", "filter logs newer than: duration (5m, 1h), RFC3339 timestamp, or YYYY-MM-DD (UTC)")
 	recursive   = flag.Bool("recursive", true, "scan directories recursively")
 	service     = flag.String("service", "", "filter by service name (comma-separated, e.g. order-service,inventory-service)")
-	source      = flag.String("source", "file", `log source backend: "file", "docker"`)
+	source      = flag.String("source", "file", `log source backend ("file" or "docker")`)
 	versionFlag = flag.Bool("version", false, "print version and exit")
 	contextFlag = flag.Int("context", 0, "show N lines of context before and after each match")
+	output      = flag.String("output", "pretty", `output format ("pretty" or "json")`)
 )
 
 var version = "dev"
@@ -143,7 +144,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	f := formatter.NewFormatter(entries, keys)
+	f := formatter.NewFormatter(entries, keys, formatter.OutputFormat(*output))
 
 	printEntries(f, entries)
 

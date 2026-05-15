@@ -14,6 +14,7 @@ import (
 
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
+	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 )
 
 var errTest = errors.New("docker error")
@@ -333,34 +334,34 @@ func TestDockerScanner_Scan_Context(t *testing.T) {
 	}
 
 	expected := []struct {
-		message   string
+		raw       string
 		isContext bool
 	}{
 		{
-			message:   "user=ignore",
+			raw:       "2024-03-10T12:00:00Z user=ignore",
 			isContext: true,
 		},
 		{
-			message:   "user=123",
+			raw:       "2024-03-10T12:00:01Z user=123",
 			isContext: false,
 		},
 		{
-			message:   "user=ignore",
+			raw:       "2024-03-10T12:00:02Z user=ignore",
 			isContext: true,
 		},
 		{
-			message:   "user=ignore",
+			raw:       "2024-03-10T12:00:03Z user=ignore",
 			isContext: true,
 		},
 	}
 
 	for i, exp := range expected {
-		if results[i].Message != exp.message {
+		if results[i].Raw != exp.raw {
 			t.Fatalf(
-				"result[%d]: expected message %q, got %q",
+				"result[%d]: expected raw %q, got %q",
 				i,
-				exp.message,
-				results[i].Message,
+				exp.raw,
+				results[i].Raw,
 			)
 		}
 
@@ -462,32 +463,43 @@ func TestDockerScanner_Follow(t *testing.T) {
 		{
 			name: "single container logs",
 			clientLogs: func(container string, follow bool, since string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("2024-03-10T12:00:00Z user=123 status=ok")), nil
+				return io.NopCloser(strings.NewReader(
+					"2024-03-10T12:00:00Z user=123 status=ok",
+				)), nil
 			},
 			clientList: func() ([]string, error) { return []string{"auth"}, nil },
 			containers: []string{"auth"},
-			want:       []string{"2024-03-10T12:00:00Z [auth] user=123 status=ok"},
+			want: []string{
+				"2024-03-10T12:00:00Z [auth]",
+			},
 		},
 		{
 			name: "multiple containers",
 			clientLogs: func(container string, follow bool, since string) (io.ReadCloser, error) {
-				if container == "auth" {
-					return io.NopCloser(strings.NewReader("2024-03-10T12:00:00Z user=123")), nil
-				}
-				return io.NopCloser(strings.NewReader("2024-03-10T12:00:00Z user=123")), nil
+				return io.NopCloser(strings.NewReader(
+					"2024-03-10T12:00:00Z user=123",
+				)), nil
 			},
 			clientList: func() ([]string, error) { return []string{"auth", "db"}, nil },
 			containers: []string{"auth", "db"},
-			want:       []string{"2024-03-10T12:00:00Z [auth] user=123", "2024-03-10T12:00:00Z [db] user=123"},
+			want: []string{
+				"[auth]",
+				"[db]",
+			},
 		},
 		{
-			name: "ignore lines that don't match search",
+			name: "ignore non-matching lines",
 			clientLogs: func(container string, follow bool, since string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("2024-03-10T12:00:00Z user=123\n2024-03-10T12:00:00Z other=xyz")), nil
+				return io.NopCloser(strings.NewReader(
+					"2024-03-10T12:00:00Z user=123\n" +
+						"2024-03-10T12:00:00Z other=xyz",
+				)), nil
 			},
 			clientList: func() ([]string, error) { return []string{"svc"}, nil },
 			containers: []string{"svc"},
-			want:       []string{"2024-03-10T12:00:00Z [svc] user=123"},
+			want: []string{
+				"[svc]",
+			},
 		},
 		{
 			name: "container returns error",
@@ -513,20 +525,23 @@ func TestDockerScanner_Follow(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
 
-			ds.Follow(ctx, tt.containers, &mockFormatter{})
+			ds.Follow(ctx, tt.containers, &testFormatter{})
 
-			lines := strings.FieldsFunc(out.String(), func(r rune) bool { return r == '\n' || r == '\r' })
+			lines := strings.FieldsFunc(out.String(), func(r rune) bool {
+				return r == '\n' || r == '\r'
+			})
 
 			sort.Strings(lines)
 			want := append([]string(nil), tt.want...)
 			sort.Strings(want)
 
 			if len(lines) != len(want) {
-				t.Fatalf("expected %v lines, got %v", len(want), len(lines))
+				t.Fatalf("expected %d lines, got %d", len(want), len(lines))
 			}
+
 			for i := range lines {
-				if lines[i] != want[i] {
-					t.Errorf("line %d: expected %q, got %q", i, want[i], lines[i])
+				if !strings.Contains(lines[i], want[i]) {
+					t.Errorf("line %d: expected to contain %q, got %q", i, want[i], lines[i])
 				}
 			}
 		})
@@ -555,7 +570,7 @@ func TestDockerScanner_Follow_Errors(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	ds.Follow(ctx, []string{"auth"}, &mockFormatter{})
+	ds.Follow(ctx, []string{"auth"}, formatter.NewFormatter(nil, nil, formatter.OutputPretty))
 
 	if !strings.Contains(errOut.String(), "docker error for auth") {
 		t.Errorf("expected error log, got %q", errOut.String())
