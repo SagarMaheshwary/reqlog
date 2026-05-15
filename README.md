@@ -95,6 +95,8 @@ reqlog [flags] <search_value>
 reqlog --dir ./logs abc123
 ```
 
+> If `--dir` is not provided, reqlog searches logs in `./logs` by default.
+
 **Key-Based Search (Recommended)**
 
 ```bash
@@ -154,6 +156,27 @@ reqlog --since 2026-04-29T14:00:00.123Z --key request_id abc123
 reqlog --since 1710943200 --key request_id abc123
 ```
 
+**JSON Output**
+
+Structured output for piping and integrations:
+
+```bash
+reqlog --output json --key request_id abc123
+reqlog --output json --key request_id abc123 | jq .
+```
+
+Output structure:
+
+```json
+{
+  "timestamp": "2026-03-20T14:00:05Z",
+  "service": "order-service",
+  "message": "request started",
+  "level": "info",
+  "request_id": "abc123"
+}
+```
+
 **Follow Logs (Live)**
 
 ```bash
@@ -177,15 +200,17 @@ reqlog --follow --key request_id abc123
 ## Features
 
 - Key-based search (`--key request_id`)
-- Optimized for large log files
-- Supports **plain text** + **JSON logs**
+- Supports plain text and JSON logs
+- Flexible timestamp parsing (RFC3339, RFC3339Nano, Unix timestamps)
+- Time filtering with `--since`
 - Docker logs support
 - Filter by service (`--service`, supports wildcards)
-- Time filtering (`--since`)
-- Colored output by service
-- Live tailing (`--follow`)
-- Case-insensitive search
-- Works across multiple files & directories
+- Context around matches (`--context`)
+- Optimized for large log files
+- Structured JSON output (`--output=json`)
+- Colored multi-service timeline output
+- Live log tailing (`--follow`)
+- Works across multiple files and directories
 
 ## Supported Log Formats
 
@@ -238,7 +263,7 @@ Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 - [x] `--latest` flag (Return latest N entries globally)
 - [x] `--context` flag (show surrounding lines)
 - [ ] `--fields` flag for JSON logs
-- [ ] `--output=json` for piping and integrations
+- [x] `--output=json` for piping and integrations
 
 **Performance & Scalability**
 
