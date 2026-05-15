@@ -234,6 +234,10 @@ func stringifyValue(v any) string {
 		return "null"
 
 	default:
-		return fmt.Sprintf("%v", val)
+		b, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(b)
 	}
 }
