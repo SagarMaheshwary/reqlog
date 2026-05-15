@@ -1,7 +1,10 @@
 package scanner
 
 import (
+	"fmt"
 	"io"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
@@ -20,8 +23,28 @@ func (m *mockDockerClient) ListContainers() ([]string, error) {
 	return m.listFn()
 }
 
-type mockFormatter struct{}
+type testFormatter struct{}
 
-func (f *mockFormatter) Format(entry domain.LogEntry) string {
-	return entry.Timestamp.Format(time.RFC3339) + " [" + entry.Service + "] " + entry.Message
+func (f *testFormatter) Format(entry domain.LogEntry) string {
+	keys := make([]string, 0, len(entry.Fields))
+
+	for k := range entry.Fields {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	var fields []string
+
+	for _, k := range keys {
+		fields = append(fields, fmt.Sprintf("%s=%v", k, entry.Fields[k]))
+	}
+
+	return fmt.Sprintf(
+		"%s [%s] %s %s",
+		entry.Timestamp.Format(time.RFC3339),
+		entry.Service,
+		entry.Message,
+		strings.Join(fields, " "),
+	)
 }

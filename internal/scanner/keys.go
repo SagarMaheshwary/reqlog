@@ -12,3 +12,9 @@ var TimestampKeys = []string{
 	"timestamp",
 	"ts",
 }
+
+var MessageKeys = map[string]struct{}{
+	"msg":     {},
+	"message": {},
+	"error":   {},
+}

@@ -1,6 +1,7 @@
 package formatter
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,52 +10,22 @@ import (
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
 
-func TestParseMessage_RemovesMessageKey(t *testing.T) {
-	msg := "level=info message=Hello request_id=abc123 extra=xyz"
-	main, pairs := parseMessage(msg)
-
-	if main != "Hello" {
-		t.Fatalf("expected main message 'Hello', got %q", main)
-	}
-
-	for _, p := range pairs {
-		if p.key == "message" || p.key == "msg" {
-			t.Fatalf("message key should be removed from pairs")
-		}
-	}
-
-	if len(pairs) != 3 { // level, request_id, extra
-		t.Fatalf("expected 3 kv pairs, got %d", len(pairs))
-	}
-}
-
-func TestParseMessage_SortsByPriority(t *testing.T) {
-	msg := "extra=foo request_id=abc123 level=warn alpha=bar"
-	_, pairs := parseMessage(msg)
-
-	if pairs[0].key != "level" {
-		t.Fatalf("expected first key 'level', got %q", pairs[0].key)
-	}
-	if pairs[1].key != "request_id" {
-		t.Fatalf("expected second key 'request_id', got %q", pairs[1].key)
-	}
-	// rest are sorted alphabetically
-	if pairs[2].key != "alpha" || pairs[3].key != "extra" {
-		t.Fatalf("expected remaining keys sorted alphabetically, got %v", pairs[2:])
-	}
-}
-
 func TestFormat_HighlightSearchKey(t *testing.T) {
 	entry := domain.LogEntry{
 		Timestamp: time.Now(),
 		Service:   "api",
-		Message:   "request_id=abc123 level=info message=hello",
+		Message:   "hello",
+		Fields: map[string]any{
+			"request_id": "abc123",
+			"level":      "info",
+		},
 	}
 
 	f := &Formatter{
 		colorizer:    NewColorizer(),
 		searchKeys:   []string{"request_id"},
 		serviceWidth: len("api"),
+		output:       OutputPretty,
 	}
 
 	out := f.Format(entry)
@@ -69,7 +40,10 @@ func TestFormat_ColorLevel(t *testing.T) {
 	entry := domain.LogEntry{
 		Timestamp: time.Now(),
 		Service:   "api",
-		Message:   "level=error message=fail",
+		Message:   "fail",
+		Fields: map[string]any{
+			"level": "error",
+		},
 	}
 
 	f := &Formatter{
@@ -99,7 +73,7 @@ func TestFormat_OutputStructure(t *testing.T) {
 		{Service: "longer-service"},
 	}
 
-	f := NewFormatter(entries, []string{"request_id"})
+	f := NewFormatter(entries, []string{"request_id"}, OutputPretty)
 
 	out := f.Format(entry)
 
@@ -125,77 +99,18 @@ func TestFormat_OutputStructure(t *testing.T) {
 	}
 }
 
-func TestParseMessage(t *testing.T) {
-	tests := []struct {
-		name         string
-		input        string
-		wantMainMsg  string
-		wantKVKeys   []string
-		wantKVValues []string
-	}{
-		{
-			name:         "message key removed and main msg extracted",
-			input:        "level=info message=Hello request_id=abc123 extra=xyz",
-			wantMainMsg:  "Hello",
-			wantKVKeys:   []string{"level", "request_id", "extra"},
-			wantKVValues: []string{"info", "abc123", "xyz"},
-		},
-		{
-			name:         "no message key, text treated as main message",
-			input:        "just some log text level=warn",
-			wantMainMsg:  "just some log text",
-			wantKVKeys:   []string{"level"},
-			wantKVValues: []string{"warn"},
-		},
-		{
-			name:         "message key with spaces preserved",
-			input:        "message=Hello world level=info request_id=xyz",
-			wantMainMsg:  "Hello world",
-			wantKVKeys:   []string{"level", "request_id"},
-			wantKVValues: []string{"info", "xyz"},
-		},
-		{
-			name:         "multiline value handled",
-			input:        "time_taken=13ms message=hit level=info",
-			wantMainMsg:  "hit",
-			wantKVKeys:   []string{"level", "time_taken"},
-			wantKVValues: []string{"info", "13ms"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mainMsg, kvs := parseMessage(tt.input)
-
-			if mainMsg != tt.wantMainMsg {
-				t.Errorf("mainMsg = %q; want %q", mainMsg, tt.wantMainMsg)
-			}
-
-			if len(kvs) != len(tt.wantKVKeys) {
-				t.Fatalf("got %d kv pairs, want %d", len(kvs), len(tt.wantKVKeys))
-			}
-
-			for i, kv := range kvs {
-				if kv.key != tt.wantKVKeys[i] || kv.value != tt.wantKVValues[i] {
-					t.Errorf("kv[%d] = {%q, %q}; want {%q, %q}", i, kv.key, kv.value, tt.wantKVKeys[i], tt.wantKVValues[i])
-				}
-			}
-		})
-	}
-}
-
 func TestSortKVByPriority(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    []kv
+		input    map[string]any
 		expected []kv
 	}{
 		{
 			name: "prioritizes level then request_id",
-			input: []kv{
-				{key: "extra", value: "foo"},
-				{key: "request_id", value: "abc"},
-				{key: "level", value: "warn"},
+			input: map[string]any{
+				"extra":      "foo",
+				"request_id": "abc",
+				"level":      "warn",
 			},
 			expected: []kv{
 				{key: "level", value: "warn"},
@@ -205,9 +120,9 @@ func TestSortKVByPriority(t *testing.T) {
 		},
 		{
 			name: "alphabetical fallback for equal priority",
-			input: []kv{
-				{key: "zeta", value: "1"},
-				{key: "alpha", value: "2"},
+			input: map[string]any{
+				"zeta":  "1",
+				"alpha": "2",
 			},
 			expected: []kv{
 				{key: "alpha", value: "2"},
@@ -216,13 +131,12 @@ func TestSortKVByPriority(t *testing.T) {
 		},
 		{
 			name: "mixed priority and alphabetical",
-			input: []kv{
-				{key: "beta", value: "b"},
-				{key: "level", value: "info"},
-				{key: "request_id", value: "r1"},
-				{key: "alpha", value: "a"},
-			},
-			expected: []kv{
+			input: map[string]any{
+				"beta":       "b",
+				"level":      "info",
+				"request_id": "r1",
+				"alpha":      "a",
+			}, expected: []kv{
 				{key: "level", value: "info"},
 				{key: "request_id", value: "r1"},
 				{key: "alpha", value: "a"},
@@ -242,7 +156,7 @@ func TestSortKVByPriority(t *testing.T) {
 }
 
 func TestFormatter_Format_ContextEntry(t *testing.T) {
-	f := NewFormatter(nil, nil)
+	f := NewFormatter(nil, nil, OutputPretty)
 
 	entry := domain.LogEntry{
 		Timestamp: mustParseTime(t, "2024-03-10T12:00:00Z"),
@@ -271,4 +185,171 @@ func mustParseTime(t *testing.T, s string) time.Time {
 	}
 
 	return ts
+}
+
+func TestFormatter_OutputJSON(t *testing.T) {
+	tests := []struct {
+		name   string
+		entry  domain.LogEntry
+		assert func(t *testing.T, m map[string]any)
+	}{
+		{
+			name: "basic json output",
+			entry: domain.LogEntry{
+				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Service:   "auth",
+				Message:   "login success",
+				Fields: map[string]any{
+					"user": "123",
+				},
+				IsContext: false,
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if m["service"] != "auth" {
+					t.Fatalf("service mismatch: %v", m["service"])
+				}
+				if m["message"] != "login success" {
+					t.Fatalf("message mismatch: %v", m["message"])
+				}
+				if m["user"] != "123" {
+					t.Fatalf("field user missing or wrong: %v", m["user"])
+				}
+			},
+		},
+
+		{
+			name: "context flag is included",
+			entry: domain.LogEntry{
+				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Service:   "auth",
+				Message:   "login",
+				IsContext: true,
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if m["context"] != true {
+					t.Fatalf("expected context=true, got %v", m["context"])
+				}
+			},
+		},
+
+		{
+			name: "reserved keys are prefixed into fields.*",
+			entry: domain.LogEntry{
+				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Service:   "auth",
+				Message:   "test",
+				Fields: map[string]any{
+					"timestamp": "override-ts",
+					"service":   "override-service",
+					"message":   "override-message",
+					"context":   "override-context",
+				},
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if m["timestamp"] == "override-ts" {
+					t.Fatalf("timestamp should NOT be overwritten")
+				}
+				if m["service"] == "override-service" {
+					t.Fatalf("service should NOT be overwritten")
+				}
+				if m["message"] == "override-message" {
+					t.Fatalf("message should NOT be overwritten")
+				}
+				if m["context"] == "override-context" {
+					t.Fatalf("context should NOT be overwritten")
+				}
+
+				if m["fields.timestamp"] != "override-ts" {
+					t.Fatalf("expected fields.timestamp, got %v", m["fields.timestamp"])
+				}
+			},
+		},
+
+		{
+			name: "multiple fields preserved",
+			entry: domain.LogEntry{
+				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Service:   "svc",
+				Message:   "ok",
+				Fields: map[string]any{
+					"a": 1,
+					"b": true,
+					"c": 1.5,
+				},
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if m["a"] != float64(1) && m["a"] != 1 {
+					t.Fatalf("unexpected a: %v", m["a"])
+				}
+				if m["b"] != true {
+					t.Fatalf("unexpected b: %v", m["b"])
+				}
+				if m["c"] != 1.5 {
+					t.Fatalf("unexpected c: %v", m["c"])
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := NewFormatter(nil, nil, OutputJSON)
+
+			out := f.Format(tt.entry)
+
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+				t.Fatalf("invalid json output: %v\nraw=%s", err, out)
+			}
+
+			tt.assert(t, decoded)
+		})
+	}
+}
+
+func TestFormatter_OutputJSON_MarshalError(t *testing.T) {
+	f := NewFormatter(nil, nil, OutputJSON)
+
+	entry := domain.LogEntry{
+		Raw: "raw-log-line",
+		Fields: map[string]any{
+			"bad": make(chan int), // json.Marshal unsupported type
+		},
+	}
+
+	out := f.Format(entry)
+
+	var decoded map[string]any
+
+	if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+		t.Fatalf("expected valid fallback json, got error: %v", err)
+	}
+
+	if decoded["error"] != "failed to marshal log entry" {
+		t.Fatalf(
+			"expected marshal error message, got %v",
+			decoded["error"],
+		)
+	}
+
+	if decoded["raw"] != "raw-log-line" {
+		t.Fatalf(
+			"expected raw field %q, got %v",
+			"raw-log-line",
+			decoded["raw"],
+		)
+	}
+
+	details, ok := decoded["details"].(string)
+	if !ok || details == "" {
+		t.Fatalf("expected non-empty details field, got %v", decoded["details"])
+	}
+}
+
+func mustParseRFC3339(s string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }

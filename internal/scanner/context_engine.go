@@ -1,6 +1,8 @@
 package scanner
 
-import "github.com/sagarmaheshwary/reqlog/internal/domain"
+import (
+	"github.com/sagarmaheshwary/reqlog/internal/domain"
+)
 
 type contextEngine struct {
 	beforeBuf      *ringBuffer

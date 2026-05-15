@@ -7,4 +7,6 @@ type LogEntry struct {
 	Service   string
 	Message   string
 	IsContext bool
+	Fields    map[string]any
+	Raw       string
 }

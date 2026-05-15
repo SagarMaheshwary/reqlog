@@ -3,6 +3,7 @@ package scanner
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
 
 func newTestFileScanner(cfg *Config) *FileScanner {
@@ -403,7 +406,7 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 	}
 }
 
-func TestFileScanner_ContextWindow_BeforeAndAfter(t *testing.T) {
+func TestFileScanner_Scan_ContextWindow_BeforeAndAfter(t *testing.T) {
 	dir := t.TempDir()
 
 	file := filepath.Join(dir, "svc.log")
@@ -414,12 +417,12 @@ func TestFileScanner_ContextWindow_BeforeAndAfter(t *testing.T) {
 	// line 4-5  -> after-context (must be included)
 	// line 6    -> should NOT be processed (stop after context)
 	writeFile(t, file, []byte(
-		"2024-03-10T12:00:00Z user=ignore\n"+ // before
-			"2024-03-10T12:00:01Z user=123\n"+ // before
-			"2024-03-10T12:00:02Z user=123\n"+ // match
-			"2024-03-10T12:00:03Z user=ignore\n"+ // after-context
-			"2024-03-10T12:00:04Z user=ignore\n"+ // after-context
-			"2024-03-10T12:00:05Z user=123\n", // must NOT be processed
+		"2024-03-10T12:00:00Z some message user=ignore\n"+ // before
+			"2024-03-10T12:00:01Z some message user=123\n"+ // before
+			"2024-03-10T12:00:02Z some message user=123\n"+ // match
+			"2024-03-10T12:00:03Z some message user=ignore\n"+ // after-context
+			"2024-03-10T12:00:04Z some message user=ignore\n"+ // after-context
+			"2024-03-10T12:00:05Z some message user=123\n", // must NOT be processed
 	))
 
 	cfg := &Config{
@@ -436,21 +439,54 @@ func TestFileScanner_ContextWindow_BeforeAndAfter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := make([]string, 0, len(results))
+	got := make([]domain.LogEntry, 0, len(results))
 	for _, r := range results {
-		got = append(got, r.Message)
+		got = append(got, r)
 	}
 
-	expected := []string{
-		"user=ignore", // before buffer
-		"user=123",    // match 1
-
-		"user=123",    // match 2 (NOT context)
-		"user=ignore", // after-context of match 2
+	expected := []domain.LogEntry{
+		{
+			Message:   "some message",
+			Service:   "svc",
+			IsContext: true,
+			Fields: map[string]any{
+				"user": "ignore",
+			},
+		},
+		{
+			Message: "some message",
+			Fields: map[string]any{
+				"user": "123",
+			},
+			IsContext: false,
+		},
+		{
+			Message: "some message",
+			Fields: map[string]any{
+				"user": "123",
+			},
+			IsContext: true,
+		},
+		{
+			Message:   "some message",
+			IsContext: true,
+			Fields: map[string]any{
+				"user": "ignore",
+			},
+		},
 	}
+	for i, exp := range expected {
+		if got[i].Message != exp.Message {
+			t.Fatalf("msg[%d]: expected %q got %q", i, exp.Message, got[i].Message)
+		}
 
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("expected %v, got %v", expected, got)
+		if got[i].IsContext != exp.IsContext {
+			t.Fatalf("ctx[%d]: expected %v got %v", i, exp.IsContext, got[i].IsContext)
+		}
+
+		if !equalFields(got[i].Fields, exp.Fields) {
+			t.Fatalf("fields[%d]: expected %v got %v", i, exp.Fields, got[i].Fields)
+		}
 	}
 }
 
@@ -562,31 +598,31 @@ func TestFileScanner_Follow(t *testing.T) {
 		{
 			name: "single file logs",
 			files: map[string]string{
-				"auth.log": "2024-03-10T12:00:00Z user=123 status=ok\n",
+				"auth.log": "2024-03-10T12:00:00Z request arrived status=ok user=123\n",
 			},
-			want: []string{"2024-03-10T12:00:00Z [auth] user=123 status=ok"},
+			want: []string{"2024-03-10T12:00:00Z [auth] request arrived status=ok user=123"},
 		},
 		{
 			name: "multiple files",
 			files: map[string]string{
-				"auth.log": "2024-03-10T12:00:00Z user=123\n",
-				"db.log":   "2024-03-10T12:00:00Z user=123\n",
+				"auth.log": "2024-03-10T12:00:00Z request arrived user=123\n",
+				"db.log":   "2024-03-10T12:00:00Z request arrived user=123\n",
 			},
-			want: []string{"2024-03-10T12:00:00Z [auth] user=123", "2024-03-10T12:00:00Z [db] user=123"},
+			want: []string{"2024-03-10T12:00:00Z [auth] request arrived user=123", "2024-03-10T12:00:00Z [db] request arrived user=123"},
 		},
 		{
 			name: "ignore lines that don't match search",
 			files: map[string]string{
-				"svc.log": "2024-03-10T12:00:00Z user=123\nother=xyz\n",
+				"svc.log": "2024-03-10T12:00:00Z request arrived user=123\nother=xyz\n",
 			},
-			want: []string{"2024-03-10T12:00:00Z [svc] user=123"},
+			want: []string{"2024-03-10T12:00:00Z [svc] request arrived user=123"},
 		},
 		{
 			name: "new lines appended",
 			files: map[string]string{
 				"append.log": "2024-03-10T12:00:00Z user=123 line1\n",
 			},
-			want: []string{"2024-03-10T12:00:00Z [append] user=123 line1", "2024-03-10T12:00:00Z [append] user=123 line2"},
+			want: []string{"2024-03-10T12:00:00Z [append] line1 user=123", "2024-03-10T12:00:00Z [append] line2 user=123"},
 			append: func() {
 				fpath := filepath.Join(dir, "append.log")
 				f, _ := os.OpenFile(fpath, os.O_APPEND|os.O_WRONLY, 0644)
@@ -622,7 +658,7 @@ func TestFileScanner_Follow(t *testing.T) {
 				}()
 			}
 
-			fs.Follow(ctx, files, &mockFormatter{})
+			fs.Follow(ctx, files, &testFormatter{})
 
 			lines := strings.FieldsFunc(out.String(), func(r rune) bool { return r == '\n' || r == '\r' })
 
@@ -659,9 +695,28 @@ func TestFileScanner_Follow_Errors(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	fs.Follow(ctx, files, &mockFormatter{})
+	fs.Follow(ctx, files, &testFormatter{})
 
 	if !strings.Contains(errOut.String(), "error scanning /tmp/nonexistent.log") {
 		t.Errorf("expected error log, got %q", errOut.String())
 	}
+}
+
+func equalFields(a, b map[string]any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok {
+			return false
+		}
+
+		if fmt.Sprint(av) != fmt.Sprint(bv) {
+			return false
+		}
+	}
+
+	return true
 }

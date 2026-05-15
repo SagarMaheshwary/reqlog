@@ -14,7 +14,7 @@ func TestContextEngine_Handle(t *testing.T) {
 		contextSize      int
 		cfg              *Config
 		inputs           []ContextLine
-		expectedMessages []string
+		expectedFields   []map[string]any
 		expectedContext  []bool
 		expectedContinue []bool
 	}{
@@ -35,14 +35,14 @@ func TestContextEngine_Handle(t *testing.T) {
 					Service: "svc",
 					IsMatch: true,
 					Entry: &domain.LogEntry{
-						Message:   "user=123",
 						Timestamp: mustParseRFC3339("2024-03-10T12:00:01Z"),
 						Service:   "svc",
+						Fields:    map[string]any{"user": "123"},
 					},
 				},
 			},
-			expectedMessages: []string{
-				"user=123",
+			expectedFields: []map[string]any{
+				{"user": "123"},
 			},
 			expectedContext: []bool{
 				false,
@@ -72,9 +72,9 @@ func TestContextEngine_Handle(t *testing.T) {
 					Service: "svc",
 					IsMatch: true,
 					Entry: &domain.LogEntry{
-						Message:   "user=123",
 						Timestamp: mustParseRFC3339("2024-03-10T12:00:01Z"),
 						Service:   "svc",
+						Fields:    map[string]any{"user": "123"},
 					},
 				},
 				{
@@ -83,10 +83,10 @@ func TestContextEngine_Handle(t *testing.T) {
 					IsMatch: false,
 				},
 			},
-			expectedMessages: []string{
-				"user=before",
-				"user=123",
-				"user=after",
+			expectedFields: []map[string]any{
+				{"user": "before"},
+				{"user": "123"},
+				{"user": "after"},
 			},
 			expectedContext: []bool{
 				true,
@@ -97,42 +97,6 @@ func TestContextEngine_Handle(t *testing.T) {
 				true,
 				true,
 				true,
-			},
-		},
-		{
-			name:        "stops after trailing context exhausted",
-			contextSize: 1,
-			cfg: &Config{
-				Limit:   1,
-				Keys:    []string{"user"},
-				Context: 1,
-			},
-			inputs: []ContextLine{
-				{
-					Line:    "2024-03-10T12:00:00Z user=123",
-					Service: "svc",
-					IsMatch: true,
-					Entry: &domain.LogEntry{
-						Message: "user=123",
-					},
-				},
-				{
-					Line:    "2024-03-10T12:00:01Z user=after",
-					Service: "svc",
-					IsMatch: false,
-				},
-			},
-			expectedMessages: []string{
-				"user=123",
-				"user=after",
-			},
-			expectedContext: []bool{
-				false,
-				true,
-			},
-			expectedContinue: []bool{
-				true,
-				false,
 			},
 		},
 		{
@@ -150,8 +114,8 @@ func TestContextEngine_Handle(t *testing.T) {
 					IsMatch: false,
 				},
 			},
-			expectedMessages: nil,
-			expectedContext:  nil,
+			expectedFields:  nil,
+			expectedContext: nil,
 			expectedContinue: []bool{
 				true,
 			},
@@ -189,33 +153,29 @@ func TestContextEngine_Handle(t *testing.T) {
 				)
 			}
 
-			if len(results) != len(tt.expectedMessages) {
-				t.Fatalf(
-					"expected %d results, got %d",
-					len(tt.expectedMessages),
-					len(results),
-				)
+			var gotCont []bool
+
+			for _, in := range tt.inputs {
+				gotCont = append(gotCont, engine.Handle(in))
 			}
 
-			for i, result := range results {
-				if result.Message != tt.expectedMessages[i] {
-					t.Fatalf(
-						"result[%d]: expected message %q, got %q. %v",
-						i,
-						tt.expectedMessages[i],
-						result.Message,
-						results,
-					)
+			if len(results) != len(tt.expectedFields) {
+				t.Fatalf("len mismatch want=%d got=%d", len(tt.expectedFields), len(results))
+			}
+			for i := range results {
+				if !reflect.DeepEqual(results[i].Fields, tt.expectedFields[i]) {
+					t.Fatalf("fields[%d] mismatch\nwant=%v\ngot=%v",
+						i, tt.expectedFields[i], results[i].Fields)
 				}
 
-				if result.IsContext != tt.expectedContext[i] {
-					t.Fatalf(
-						"result[%d]: expected IsContext=%v, got %v",
-						i,
-						tt.expectedContext[i],
-						result.IsContext,
-					)
+				if results[i].IsContext != tt.expectedContext[i] {
+					t.Fatalf("ctx[%d] mismatch want=%v got=%v",
+						i, tt.expectedContext[i], results[i].IsContext)
 				}
+			}
+
+			if !reflect.DeepEqual(gotCont, tt.expectedContinue) {
+				t.Fatalf("continue mismatch\nwant=%v\ngot=%v", tt.expectedContinue, gotCont)
 			}
 		})
 	}

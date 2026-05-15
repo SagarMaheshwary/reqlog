@@ -1,7 +1,8 @@
 package scanner
 
 import (
-	"sort"
+	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -82,10 +83,13 @@ func (lp *LineProcessor) processJSONLine(line string, service string, skipMatch 
 		return nil, false
 	}
 
+	parsedFields := extractJSONFields(obj, tsKey)
+
 	return &domain.LogEntry{
 		Timestamp: ts,
 		Service:   service,
-		Message:   buildJSONMessage(obj, tsKey),
+		Message:   parsedFields.Message,
+		Fields:    parsedFields.Fields,
 	}, true
 }
 
@@ -107,10 +111,14 @@ func (lp *LineProcessor) processTextLine(line string, service string, skipMatch 
 		return nil, false
 	}
 
+	parsed := extractTextFields(parts[1:]) // skip timestamp
+
 	return &domain.LogEntry{
 		Timestamp: ts,
 		Service:   service,
-		Message:   extractTextMessage(line),
+		Message:   parsed.Message,
+		Fields:    parsed.Fields,
+		Raw:       line,
 	}, true
 }
 
@@ -183,36 +191,108 @@ func stripQuotes(val string) string {
 	return val
 }
 
-func buildJSONMessage(obj gjson.Result, tsKey string) string {
-	parts := make([]string, 0, 8)
+type ParsedFields struct {
+	Fields  map[string]any
+	Message string
+}
+
+func extractJSONFields(obj gjson.Result, tsKey string) ParsedFields {
+	fields := make(map[string]any, 8)
+	var message string
 
 	obj.ForEach(func(key, value gjson.Result) bool {
 		k := key.String()
-		if tsKey == k {
+
+		if k == tsKey {
 			return true
 		}
 
-		parts = append(parts, formatJSONField(k, value))
+		v := extractJSONValue(value)
+
+		if _, isMsg := MessageKeys[k]; isMsg {
+			if message == "" {
+				message = value.String()
+			}
+			return true
+		}
+
+		fields[k] = v
 		return true
 	})
 
-	sort.Strings(parts)
-	return strings.Join(parts, " ")
+	return ParsedFields{
+		Fields:  fields,
+		Message: message,
+	}
 }
 
-func formatJSONField(key string, value gjson.Result) string {
+func extractJSONValue(value gjson.Result) any {
 	switch value.Type {
 	case gjson.String:
-		return key + "=" + value.String()
+		return value.String()
+
+	case gjson.Number:
+		return value.Value()
+
+	case gjson.True:
+		return true
+
+	case gjson.False:
+		return false
+
+	case gjson.Null:
+		return nil
+
+	case gjson.JSON:
+		var v any
+		if err := json.Unmarshal([]byte(value.Raw), &v); err == nil {
+			return v
+		}
+
+		return value.Raw
+
 	default:
-		return key + "=" + value.Raw
+		return value.Raw
 	}
 }
 
-func extractTextMessage(line string) string {
-	i := strings.IndexByte(line, ' ')
-	if i == -1 {
-		return ""
+func extractTextFields(parts []string) ParsedFields {
+	fields := make(map[string]any, 8)
+	messageParts := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		key, value, ok := strings.Cut(part, "=")
+		if ok && key != "" {
+			fields[key] = parseTextValue(value)
+			continue
+		}
+
+		messageParts = append(messageParts, part)
 	}
-	return strings.TrimLeft(line[i+1:], " ")
+
+	return ParsedFields{
+		Fields:  fields,
+		Message: strings.Join(messageParts, " "),
+	}
+}
+
+func parseTextValue(v string) any {
+	if strings.ContainsAny(v, ".eE") {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+
+	if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+		return i
+	}
+
+	switch strings.ToLower(v) {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+
+	return v
 }
