@@ -1,5 +1,7 @@
 package scanner
 
+import "github.com/sagarmaheshwary/reqlog/internal/config"
+
 type Config struct {
 	Dir         string
 	SearchValue string
@@ -9,7 +11,7 @@ type Config struct {
 	Limit       int
 	Recursive   bool
 	Services    []string
-	JSONMode    bool
 	Latest      bool
 	Context     int
+	Format      config.LogFormat
 }

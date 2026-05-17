@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
 
@@ -383,7 +384,7 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 				Dir:         dir,
 				SearchValue: "123",
 				Keys:        []string{"user"},
-				JSONMode:    true,
+				Format:      config.FormatJSON,
 			}
 
 			lp := NewLineProcessor(cfg, NewTimeParser())

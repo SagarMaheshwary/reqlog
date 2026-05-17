@@ -8,28 +8,30 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
 
 var tsFormat = "2006-01-02T15:04:05.000Z07:00"
 
-type OutputFormat string
-
-const (
-	OutputPretty OutputFormat = "pretty"
-	OutputJSON   OutputFormat = "json"
-)
-
 type Formatter struct {
 	colorizer    *Colorizer
 	serviceWidth int
 	searchKeys   []string
-	output       OutputFormat
+	output       config.OutputFormat
+	context      int
 }
 
-func NewFormatter(entries []domain.LogEntry, searchKeys []string, output OutputFormat) *Formatter {
+type Opts struct {
+	Entries    []domain.LogEntry
+	SearchKeys []string
+	Output     config.OutputFormat
+	Context    int
+}
+
+func NewFormatter(opts *Opts) *Formatter {
 	max := 0
-	for _, e := range entries {
+	for _, e := range opts.Entries {
 		if len(e.Service) > max {
 			max = len(e.Service)
 		}
@@ -38,8 +40,9 @@ func NewFormatter(entries []domain.LogEntry, searchKeys []string, output OutputF
 	return &Formatter{
 		colorizer:    NewColorizer(),
 		serviceWidth: max,
-		searchKeys:   searchKeys,
-		output:       output,
+		searchKeys:   opts.SearchKeys,
+		output:       opts.Output,
+		context:      opts.Context,
 	}
 }
 
@@ -52,10 +55,10 @@ func (f *Formatter) padAfter(service string) string {
 
 func (f *Formatter) Format(entry domain.LogEntry) string {
 	switch f.output {
-	case OutputJSON:
+	case config.OutputJSON:
 		return f.outputJSON(entry)
 
-	case OutputPretty:
+	case config.OutputPretty:
 		fallthrough
 
 	default:
@@ -69,7 +72,10 @@ func (f *Formatter) outputJSON(entry domain.LogEntry) string {
 	out["timestamp"] = entry.Timestamp.Format(time.RFC3339Nano)
 	out["service"] = entry.Service
 	out["message"] = entry.Message
-	out["context"] = entry.IsContext
+
+	if f.context > 0 {
+		out["context"] = entry.IsContext
+	}
 
 	for k, v := range entry.Fields {
 		// avoid accidental overwrite of core keys

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/tidwall/gjson"
 )
@@ -38,26 +39,25 @@ func (lp *LineProcessor) ProcessLine(line, service string) (*domain.LogEntry, bo
 		}
 	}
 
-	if lp.config.JSONMode {
-		return lp.processJSONLine(line, service, false)
-	}
-
-	return lp.processTextLine(
-		strings.TrimRight(line, "\r\n"),
-		service,
-		false,
-	)
+	return lp.Parse(line, service, false)
 }
 
-func (lp *LineProcessor) ParseOnly(line, service string) (*domain.LogEntry, bool) {
-	if lp.config.JSONMode {
-		return lp.processJSONLine(line, service, true)
+func (lp *LineProcessor) Parse(line, service string, skipMatch bool) (*domain.LogEntry, bool) {
+	line = strings.TrimRight(line, "\r\n")
+
+	switch lp.config.Format {
+	case config.FormatJSON:
+		return lp.processJSONLine(line, service, skipMatch)
+	case config.FormatText:
+		return lp.processTextLine(line, service, skipMatch)
+	case config.FormatAuto:
+		fallthrough
+	default:
+		if isJSONLine(line) {
+			return lp.processJSONLine(line, service, skipMatch)
+		}
+		return lp.processTextLine(line, service, skipMatch)
 	}
-	return lp.processTextLine(
-		strings.TrimRight(line, "\r\n"),
-		service,
-		true,
-	)
 }
 
 func (lp *LineProcessor) processJSONLine(line string, service string, skipMatch bool) (*domain.LogEntry, bool) {
@@ -295,4 +295,14 @@ func parseTextValue(v string) any {
 	}
 
 	return v
+}
+
+func isJSONLine(line string) bool {
+	line = strings.TrimSpace(line)
+
+	if len(line) < 2 {
+		return false
+	}
+
+	return line[0] == '{'
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
@@ -200,7 +201,7 @@ func TestDockerScanner_Scan_JSON(t *testing.T) {
 			cfg := &Config{
 				SearchValue: "123",
 				Keys:        []string{"user"},
-				JSONMode:    true,
+				Format:      config.FormatJSON,
 			}
 
 			ds := newTestDockerScanner(cfg, mock)
@@ -570,7 +571,10 @@ func TestDockerScanner_Follow_Errors(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	ds.Follow(ctx, []string{"auth"}, formatter.NewFormatter(nil, nil, formatter.OutputPretty))
+	f := formatter.NewFormatter(&formatter.Opts{
+		Output: config.OutputPretty,
+	})
+	ds.Follow(ctx, []string{"auth"}, f)
 
 	if !strings.Contains(errOut.String(), "docker error for auth") {
 		t.Errorf("expected error log, got %q", errOut.String())

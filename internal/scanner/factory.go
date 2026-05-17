@@ -5,14 +5,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 )
 
-func New(source string, lp *LineProcessor) (Scanner, error) {
+func New(source config.Source, lp *LineProcessor) (Scanner, error) {
 	switch source {
-	case "file":
+	case config.SourceFile:
 		return NewFileScanner(lp, time.Second, os.Stdout, os.Stderr, time.Now()), nil
-	case "docker":
+	case config.SourceDocker:
 		return NewDockerScanner(lp, docker.NewDockerCLIClient(), os.Stdout, os.Stderr, time.Now()), nil
 	default:
 		return nil, fmt.Errorf("unknown source type")

@@ -59,7 +59,7 @@ func (c *contextEngine) Handle(in ContextLine) bool {
 		return true
 	}
 
-	entry, ok := c.lineProcessor.ParseOnly(in.Line, in.Service)
+	entry, ok := c.lineProcessor.Parse(in.Line, in.Service, true)
 	if !ok {
 		return true
 	}

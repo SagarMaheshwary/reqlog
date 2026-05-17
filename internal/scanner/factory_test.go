@@ -1,6 +1,10 @@
 package scanner
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/sagarmaheshwary/reqlog/internal/config"
+)
 
 func TestNewScanner(t *testing.T) {
 	cfg := &Config{}
@@ -8,13 +12,13 @@ func TestNewScanner(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		source  string
+		source  config.Source
 		wantErr bool
 		check   func(t *testing.T, s Scanner)
 	}{
 		{
 			name:   "file source",
-			source: "file",
+			source: config.SourceFile,
 			check: func(t *testing.T, s Scanner) {
 				if _, ok := s.(*FileScanner); !ok {
 					t.Fatalf("expected *FileScanner")
@@ -23,7 +27,7 @@ func TestNewScanner(t *testing.T) {
 		},
 		{
 			name:   "docker source",
-			source: "docker",
+			source: config.SourceDocker,
 			check: func(t *testing.T, s Scanner) {
 				if _, ok := s.(*DockerScanner); !ok {
 					t.Fatalf("expected *DockerScanner")

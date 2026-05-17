@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/tidwall/gjson"
 )
 
@@ -71,7 +72,7 @@ func TestLineProcessor_ProcessLine_TextMode(t *testing.T) {
 				SearchValue: tt.searchValue,
 				IgnoreCase:  tt.ignoreCase,
 				Keys:        tt.keys,
-				JSONMode:    false,
+				Format:      config.FormatText,
 			}
 
 			lp := NewLineProcessor(cfg, tp)
@@ -168,7 +169,7 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 				SearchValue: tt.searchValue,
 				IgnoreCase:  tt.ignoreCase,
 				Keys:        tt.keys,
-				JSONMode:    true,
+				Format:      config.FormatJSON,
 			}
 
 			lp := NewLineProcessor(cfg, tp)
@@ -188,7 +189,7 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 	}
 }
 
-func TestLineProcessor_ParseOnly(t *testing.T) {
+func TestLineProcessor_Parse(t *testing.T) {
 	tests := []struct {
 		name      string
 		cfg       *Config
@@ -227,7 +228,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		{
 			name: "valid json log",
 			cfg: &Config{
-				JSONMode: true,
+				Format: config.FormatJSON,
 			},
 			line:    `{"time":"2024-03-10T12:00:00Z","user":"999","status":"ok"}`,
 			service: "api",
@@ -237,7 +238,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		{
 			name: "invalid json log",
 			cfg: &Config{
-				JSONMode: true,
+				Format: config.FormatJSON,
 			},
 			line:      `{"time":"2024-03-10T12:00:00Z"`,
 			service:   "api",
@@ -247,7 +248,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		{
 			name: "json missing timestamp",
 			cfg: &Config{
-				JSONMode: true,
+				Format: config.FormatJSON,
 			},
 			line:      `{"user":"123"}`,
 			service:   "api",
@@ -260,7 +261,7 @@ func TestLineProcessor_ParseOnly(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			lp := NewLineProcessor(tt.cfg, NewTimeParser())
 
-			entry, ok := lp.ParseOnly(tt.line, tt.service)
+			entry, ok := lp.Parse(tt.line, tt.service, true)
 
 			if ok != tt.wantOK {
 				t.Fatalf("expected ok=%v, got %v", tt.wantOK, ok)
@@ -306,7 +307,7 @@ func TestLineProcessor_JSONTimestampKeyCaching(t *testing.T) {
 	cfg := &Config{
 		SearchValue: "abc",
 		Keys:        []string{"request_id"},
-		JSONMode:    true,
+		Format:      config.FormatJSON,
 	}
 
 	lp := NewLineProcessor(cfg, tp)
