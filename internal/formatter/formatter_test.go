@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 )
 
@@ -25,7 +26,7 @@ func TestFormat_HighlightSearchKey(t *testing.T) {
 		colorizer:    NewColorizer(),
 		searchKeys:   []string{"request_id"},
 		serviceWidth: len("api"),
-		output:       OutputPretty,
+		output:       config.OutputPretty,
 	}
 
 	out := f.Format(entry)
@@ -73,8 +74,11 @@ func TestFormat_OutputStructure(t *testing.T) {
 		{Service: "longer-service"},
 	}
 
-	f := NewFormatter(entries, []string{"request_id"}, OutputPretty)
-
+	f := NewFormatter(&Opts{
+		Entries:    entries,
+		SearchKeys: []string{"request_id"},
+		Output:     config.OutputPretty,
+	})
 	out := f.Format(entry)
 
 	if !strings.Contains(out, ts.Format(tsFormat)) {
@@ -156,7 +160,9 @@ func TestSortKVByPriority(t *testing.T) {
 }
 
 func TestFormatter_Format_ContextEntry(t *testing.T) {
-	f := NewFormatter(nil, nil, OutputPretty)
+	f := NewFormatter(&Opts{
+		Output: config.OutputPretty,
+	})
 
 	entry := domain.LogEntry{
 		Timestamp: mustParseTime(t, "2024-03-10T12:00:00Z"),
@@ -189,9 +195,10 @@ func mustParseTime(t *testing.T, s string) time.Time {
 
 func TestFormatter_OutputJSON(t *testing.T) {
 	tests := []struct {
-		name   string
-		entry  domain.LogEntry
-		assert func(t *testing.T, m map[string]any)
+		name    string
+		entry   domain.LogEntry
+		context int
+		assert  func(t *testing.T, m map[string]any)
 	}{
 		{
 			name: "basic json output",
@@ -204,6 +211,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 				},
 				IsContext: false,
 			},
+			context: 0,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["service"] != "auth" {
 					t.Fatalf("service mismatch: %v", m["service"])
@@ -225,6 +233,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 				Message:   "login",
 				IsContext: true,
 			},
+			context: 1,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["context"] != true {
 					t.Fatalf("expected context=true, got %v", m["context"])
@@ -245,6 +254,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 					"context":   "override-context",
 				},
 			},
+			context: 1,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["timestamp"] == "override-ts" {
 					t.Fatalf("timestamp should NOT be overwritten")
@@ -277,6 +287,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 					"c": 1.5,
 				},
 			},
+			context: 0,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["a"] != float64(1) && m["a"] != 1 {
 					t.Fatalf("unexpected a: %v", m["a"])
@@ -293,7 +304,10 @@ func TestFormatter_OutputJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := NewFormatter(nil, nil, OutputJSON)
+			f := NewFormatter(&Opts{
+				Output:  config.OutputJSON,
+				Context: tt.context,
+			})
 
 			out := f.Format(tt.entry)
 
@@ -308,7 +322,9 @@ func TestFormatter_OutputJSON(t *testing.T) {
 }
 
 func TestFormatter_OutputJSON_MarshalError(t *testing.T) {
-	f := NewFormatter(nil, nil, OutputJSON)
+	f := NewFormatter(&Opts{
+		Output: config.OutputJSON,
+	})
 
 	entry := domain.LogEntry{
 		Raw: "raw-log-line",

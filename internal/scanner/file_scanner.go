@@ -167,11 +167,92 @@ func (fs *FileScanner) processFile(path string, f formatter.LogFormatter) {
 
 func (fs *FileScanner) ListSources() ([]string, error) {
 	cfg := fs.lineProcessor.config
+
+	matcher := buildServiceMatcher(cfg.Services)
+
+	if cfg.Recursive {
+		return fs.listRecursive(cfg.Dir, matcher)
+	}
+
+	return fs.listFlat(cfg.Dir, matcher)
+}
+
+func (fs *FileScanner) listRecursive(
+	dir string,
+	matchesService func(string) bool,
+) ([]string, error) {
+	files := make([]string, 0, 16)
+
+	err := filepath.WalkDir(
+		dir,
+		func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				logScanError(fs.errOut, path, err)
+				return nil // continue walking
+			}
+
+			if d.IsDir() {
+				return nil
+			}
+
+			name := d.Name()
+
+			if !isLogFile(name) {
+				return nil
+			}
+
+			if !matchesService(name) {
+				return nil
+			}
+
+			files = append(files, path)
+
+			return nil
+		},
+	)
+
+	return files, err
+}
+
+func (fs *FileScanner) listFlat(
+	dir string,
+	matchesService func(string) bool,
+) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]string, 0, 16)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+
+		if !isLogFile(name) {
+			continue
+		}
+
+		if !matchesService(name) {
+			continue
+		}
+
+		files = append(files, filepath.Join(dir, name))
+	}
+
+	return files, nil
+}
+
+func buildServiceMatcher(services []string) func(string) bool {
 	exact := map[string]struct{}{}
 	prefixes := []string{}
 
-	for _, s := range cfg.Services {
+	for _, s := range services {
 		s = strings.TrimSpace(s)
+
 		if s == "" {
 			continue
 		}
@@ -183,7 +264,7 @@ func (fs *FileScanner) ListSources() ([]string, error) {
 		}
 	}
 
-	matchesService := func(name string) bool {
+	return func(name string) bool {
 		if len(exact) == 0 && len(prefixes) == 0 {
 			return true
 		}
@@ -199,62 +280,11 @@ func (fs *FileScanner) ListSources() ([]string, error) {
 				return true
 			}
 		}
+
 		return false
 	}
+}
 
-	if cfg.Recursive {
-		files := make([]string, 0, 16)
-
-		err := filepath.WalkDir(cfg.Dir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				logScanError(fs.errOut, path, err)
-				return nil // continue walking
-			}
-
-			if d.IsDir() {
-				return nil
-			}
-
-			name := d.Name()
-
-			if !strings.HasSuffix(name, ".log") {
-				return nil
-			}
-
-			if !matchesService(name) {
-				return nil
-			}
-
-			files = append(files, path)
-			return nil
-		})
-		return files, err
-	}
-
-	entries, err := os.ReadDir(cfg.Dir)
-	if err != nil {
-		return nil, err
-	}
-
-	files := make([]string, 0, 16)
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-
-		if !strings.HasSuffix(name, ".log") {
-			continue
-		}
-
-		if !matchesService(name) {
-			continue
-		}
-
-		files = append(files, filepath.Join(cfg.Dir, name))
-	}
-
-	return files, nil
+func isLogFile(name string) bool {
+	return strings.HasSuffix(name, ".log")
 }

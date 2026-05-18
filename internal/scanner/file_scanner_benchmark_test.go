@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sagarmaheshwary/reqlog/internal/config"
 )
 
 func createPlainLogFile(b *testing.B, dir, name string, lines int, matchEvery int) string {
@@ -78,9 +80,9 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 			Dir:         dir,
 			SearchValue: "abc123",
 			IgnoreCase:  false,
-			Keys:        DefaultKeys,
+			Keys:        config.DefaultKeys,
 			Since:       "",
-			JSONMode:    false,
+			Format:      config.FormatText,
 		}
 		lp := NewLineProcessor(cfg, NewTimeParser())
 
@@ -111,9 +113,9 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 			Dir:         dir,
 			SearchValue: "json-abc",
 			IgnoreCase:  false,
-			Keys:        DefaultKeys,
+			Keys:        config.DefaultKeys,
 			Since:       "",
-			JSONMode:    true,
+			Format:      config.FormatJSON,
 		}
 		lp := NewLineProcessor(cfg, NewTimeParser())
 

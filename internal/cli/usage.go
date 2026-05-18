@@ -1,0 +1,81 @@
+package cli
+
+import (
+	"flag"
+	"fmt"
+)
+
+func Usage() {
+	fmt.Fprintf(flag.CommandLine.Output(), `reqlog - Search and trace requests across microservices, files, and Docker logs — fast.
+
+Usage:
+  reqlog [flags] <search_value>
+
+Examples:
+  reqlog abc123
+  reqlog -k request_id abc123
+  reqlog -S docker -s order-service abc123
+  reqlog -f -o json abc123 | jq
+
+Flags:
+  -d, --dir string
+        directory containing log files
+        (default "./logs")
+
+  -i, --ignore-case
+        perform case-insensitive search
+
+  -n, --limit int
+        limit number of results
+
+        Tail-style shorthand is also supported:
+        reqlog -100 abc123
+
+  -l, --latest
+        return globally latest N matches across all sources
+
+  -f, --follow
+        follow logs in real time
+
+  -k, --key string
+        field key to match
+        (e.g. request_id, trace_id, event_key)
+
+  -t, --since string
+        filter logs newer than:
+        duration (5m, 1h), RFC3339 timestamp, or YYYY-MM-DD
+
+  -r, --recursive
+        scan directories recursively
+
+  -s, --service string
+        filter by service name
+        (comma-separated)
+
+  -S, --source string
+        log source backend ("file" or "docker")
+        (default "file")
+
+  -c, --context int
+        show N lines of context before and after each match
+
+  -o, --output string
+        output format ("pretty" or "json")
+        (default "pretty")
+
+  -F, --format string
+        log parsing format ("auto", "json", or "text")
+        (default "auto")
+
+  -v, --version
+        print version and exit
+`)
+}
+
+func Info() string {
+	return `Usage:
+  reqlog [flags] <search_value>
+
+Run 'reqlog --help' for more information.
+`
+}
