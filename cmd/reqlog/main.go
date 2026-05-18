@@ -56,6 +56,7 @@ func run(cfg *config.Config) {
 		Services:    cfg.Services,
 		Latest:      cfg.Latest,
 		Context:     cfg.Context,
+		Format:      cfg.Format,
 	}, scanner.NewTimeParser())
 	scn, err := scanner.New(cfg.Source, lp)
 	if err != nil {
