@@ -3,6 +3,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
@@ -21,7 +22,10 @@ func ParseConfig() (*config.Config, error) {
 
 	opts := registerFlags(cfg)
 
-	flag.Parse()
+	err := flag.CommandLine.Parse(normalizeArgs(os.Args[1:]))
+	if err != nil {
+		return nil, err
+	}
 
 	applyDerivedConfig(cfg, opts)
 
@@ -184,6 +188,35 @@ func validateConfig(cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+func normalizeArgs(args []string) []string {
+	out := make([]string, 0, len(args))
+
+	for _, arg := range args {
+		if isTailStyleLimit(arg) {
+			out = append(out, "-n", arg[1:])
+			continue
+		}
+
+		out = append(out, arg)
+	}
+
+	return out
+}
+
+func isTailStyleLimit(arg string) bool {
+	if len(arg) < 2 || arg[0] != '-' {
+		return false
+	}
+
+	for _, ch := range arg[1:] {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func stringFlag(target *string, name, short, def, usage string) {

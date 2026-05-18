@@ -255,6 +255,16 @@ func TestLineProcessor_Parse(t *testing.T) {
 			wantOK:    false,
 			wantIsNil: true,
 		},
+		{
+			name: "auto detect json",
+			cfg: &Config{
+				Format: config.FormatAuto,
+			},
+			line:    `{"time":"2024-03-10T12:00:00Z","user":"999","status":"ok"}`,
+			service: "api",
+			wantOK:  true,
+			wantSvc: "api",
+		},
 	}
 
 	for _, tt := range tests {
@@ -786,6 +796,209 @@ func TestExtractTextFields(t *testing.T) {
 
 			if got.Message != tt.want.Message {
 				t.Fatalf("message mismatch\nwant: %q\ngot:  %q", tt.want.Message, got.Message)
+			}
+		})
+	}
+}
+
+func TestExtractJSONValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		key   string
+		want  any
+	}{
+		{
+			name:  "string value",
+			input: `{"v":"hello"}`,
+			key:   "v",
+			want:  "hello",
+		},
+		{
+			name:  "integer number",
+			input: `{"v":42}`,
+			key:   "v",
+			want:  float64(42),
+		},
+		{
+			name:  "float number",
+			input: `{"v":3.14}`,
+			key:   "v",
+			want:  3.14,
+		},
+		{
+			name:  "true boolean",
+			input: `{"v":true}`,
+			key:   "v",
+			want:  true,
+		},
+		{
+			name:  "false boolean",
+			input: `{"v":false}`,
+			key:   "v",
+			want:  false,
+		},
+		{
+			name:  "null value",
+			input: `{"v":null}`,
+			key:   "v",
+			want:  nil,
+		},
+		{
+			name:  "object json",
+			input: `{"v":{"a":1}}`,
+			key:   "v",
+			want: map[string]any{
+				"a": float64(1),
+			},
+		},
+		{
+			name:  "array json",
+			input: `{"v":["a","b"]}`,
+			key:   "v",
+			want:  []any{"a", "b"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := gjson.Parse(tt.input).Get(tt.key)
+
+			got := extractJSONValue(result)
+
+			gotB, _ := json.Marshal(got)
+			wantB, _ := json.Marshal(tt.want)
+
+			if string(gotB) != string(wantB) {
+				t.Fatalf("expected %s got %s", string(wantB), string(gotB))
+			}
+		})
+	}
+}
+
+func TestParseTextValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  any
+	}{
+		{
+			name:  "integer",
+			input: "42",
+			want:  int64(42),
+		},
+		{
+			name:  "negative integer",
+			input: "-10",
+			want:  int64(-10),
+		},
+		{
+			name:  "float",
+			input: "3.14",
+			want:  3.14,
+		},
+		{
+			name:  "scientific notation lowercase",
+			input: "1e3",
+			want:  1000.0,
+		},
+		{
+			name:  "scientific notation uppercase",
+			input: "2E2",
+			want:  200.0,
+		},
+		{
+			name:  "true boolean lowercase",
+			input: "true",
+			want:  true,
+		},
+		{
+			name:  "false boolean lowercase",
+			input: "false",
+			want:  false,
+		},
+		{
+			name:  "true boolean uppercase",
+			input: "TRUE",
+			want:  true,
+		},
+		{
+			name:  "plain string",
+			input: "hello",
+			want:  "hello",
+		},
+		{
+			name:  "alphanumeric string",
+			input: "abc123",
+			want:  "abc123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseTextValue(tt.input)
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("expected %#v got %#v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestIsJSONLine(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{
+			name: "valid json object",
+			line: `{"msg":"hello"}`,
+			want: true,
+		},
+		{
+			name: "valid json with leading whitespace",
+			line: "   \t  {\"msg\":\"hello\"}",
+			want: true,
+		},
+		{
+			name: "empty string",
+			line: "",
+			want: false,
+		},
+		{
+			name: "whitespace only",
+			line: "   \n\t  ",
+			want: false,
+		},
+		{
+			name: "single opening brace",
+			line: "{",
+			want: false,
+		},
+		{
+			name: "plain text log",
+			line: "2024-03-10T12:00:00Z level=info",
+			want: false,
+		},
+		{
+			name: "json array should be false",
+			line: `["a","b"]`,
+			want: false,
+		},
+		{
+			name: "starts with bracket after whitespace",
+			line: "   [1,2,3]",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isJSONLine(tt.line)
+
+			if got != tt.want {
+				t.Fatalf("expected %v got %v", tt.want, got)
 			}
 		})
 	}

@@ -195,9 +195,10 @@ func mustParseTime(t *testing.T, s string) time.Time {
 
 func TestFormatter_OutputJSON(t *testing.T) {
 	tests := []struct {
-		name   string
-		entry  domain.LogEntry
-		assert func(t *testing.T, m map[string]any)
+		name    string
+		entry   domain.LogEntry
+		context int
+		assert  func(t *testing.T, m map[string]any)
 	}{
 		{
 			name: "basic json output",
@@ -210,6 +211,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 				},
 				IsContext: false,
 			},
+			context: 0,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["service"] != "auth" {
 					t.Fatalf("service mismatch: %v", m["service"])
@@ -231,6 +233,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 				Message:   "login",
 				IsContext: true,
 			},
+			context: 1,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["context"] != true {
 					t.Fatalf("expected context=true, got %v", m["context"])
@@ -251,6 +254,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 					"context":   "override-context",
 				},
 			},
+			context: 1,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["timestamp"] == "override-ts" {
 					t.Fatalf("timestamp should NOT be overwritten")
@@ -283,6 +287,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 					"c": 1.5,
 				},
 			},
+			context: 0,
 			assert: func(t *testing.T, m map[string]any) {
 				if m["a"] != float64(1) && m["a"] != 1 {
 					t.Fatalf("unexpected a: %v", m["a"])
@@ -299,14 +304,9 @@ func TestFormatter_OutputJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			context := 0
-			if tt.entry.IsContext {
-				context = 1
-			}
-
 			f := NewFormatter(&Opts{
 				Output:  config.OutputJSON,
-				Context: context,
+				Context: tt.context,
 			})
 
 			out := f.Format(tt.entry)

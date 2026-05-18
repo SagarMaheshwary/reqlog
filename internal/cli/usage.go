@@ -28,6 +28,9 @@ Flags:
   -n, --limit int
         limit number of results
 
+        Tail-style shorthand is also supported:
+        reqlog -100 abc123
+
   -l, --latest
         return globally latest N matches across all sources
 
