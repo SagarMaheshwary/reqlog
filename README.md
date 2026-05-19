@@ -39,7 +39,7 @@ curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/instal
 Verify:
 
 ```bash
-reqlog --version
+reqlog -v
 ```
 
 **Windows**
@@ -56,32 +56,33 @@ Then:
 Verify:
 
 ```bash
-reqlog --version
+reqlog -v
 ```
 
 ## Quick Start
 
+Search logs using common request tracing keys like:
+`request_id`, `req_id`, `trace_id`, and `correlation_id`.
+
 Search log files:
 
 ```bash
-reqlog --dir ./logs --key request_id abc123
+reqlog abc123
 ```
 
 Search Docker containers:
 
 ```bash
-reqlog --source docker --key request_id abc123
+reqlog -S docker abc123
 ```
 
 Example output:
 
-```shell
+```text
 2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
 2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
 2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
 ```
-
-Follow a request across services in seconds.
 
 ## Usage
 
@@ -92,44 +93,53 @@ reqlog [flags] <search_value>
 **Basic Search**
 
 ```bash
-reqlog --dir ./logs abc123
+reqlog abc123
 ```
 
-> If `--dir` is not provided, reqlog searches logs in `./logs` by default.
+> reqlog searches `./logs` by default.
 
-**Key-Based Search (Recommended)**
+**Key-Based Search**
 
 ```bash
-reqlog --key request_id abc123
-reqlog --key event_key order.created
+reqlog -k request_id abc123
+reqlog -k event_key order.created
 ```
 
-**JSON Logs**
+**Log Format Detection**
+
+reqlog automatically detects JSON logs by default.
 
 ```bash
-reqlog --dir ./logs --json --key trace_id trace-123
+reqlog -k trace_id trace-123
+```
+
+Force JSON or text parsing explicitly when needed:
+
+```bash
+reqlog --format json abc123
+reqlog --format text abc123
 ```
 
 **Docker Logs**
 
 ```bash
-reqlog --source docker --service api-gateway abc123
+reqlog -S docker -s api-gateway abc123
 ```
 
-**Wildcard support**
+**Service Filtering**
 
 ```bash
-reqlog --service order-service* abc123
+reqlog -s order-service abc123
 ```
 
-> `--service` filters **container names** when using `--source docker`; otherwise, it filters **log file names**.
+> `-s` filters **container names** when using Docker logs; otherwise, it filters **log file names**.
 
 **Context Around Matches**
 
 Show surrounding log lines before and after each match:
 
 ```bash
-reqlog --context 2 --key request_id abc123
+reqlog -c 2 abc123
 ```
 
 **Limiting Results**
@@ -137,23 +147,29 @@ reqlog --context 2 --key request_id abc123
 Return first N matches per source:
 
 ```bash
-reqlog --limit 10 --key request_id abc123
+reqlog -n 10 abc123
+```
+
+Tail-style shorthand is also supported:
+
+```bash
+reqlog -100 abc123
 ```
 
 Return globally latest N matches across all sources:
 
 ```bash
-reqlog --latest --limit 10 --key request_id abc123
+reqlog -l -n 10 abc123
 ```
 
 **Time Filtering**
 
 ```bash
-reqlog --since 10m --key request_id abc123
-reqlog --since 2026-04-29 --key request_id abc123
-reqlog --since 2026-04-29T14:00:00Z --key request_id abc123
-reqlog --since 2026-04-29T14:00:00.123Z --key request_id abc123
-reqlog --since 1710943200 --key request_id abc123
+reqlog --since 10m abc123
+reqlog --since 2026-04-29 abc123
+reqlog --since 2026-04-29T14:00:00Z abc123
+reqlog --since 2026-04-29T14:00:00.123Z abc123
+reqlog --since 1710943200 abc123
 ```
 
 **JSON Output**
@@ -161,8 +177,8 @@ reqlog --since 1710943200 --key request_id abc123
 Structured output for piping and integrations:
 
 ```bash
-reqlog --output json --key request_id abc123
-reqlog --output json --key request_id abc123 | jq .
+reqlog -o json abc123
+reqlog -o json abc123 | jq .
 ```
 
 Output structure:
@@ -177,10 +193,10 @@ Output structure:
 }
 ```
 
-**Follow Logs (Live)**
+**Live Log Streaming**
 
 ```bash
-reqlog --follow --key request_id abc123
+reqlog -f abc123
 ```
 
 > Full usage guide: [docs/usage.md](./docs/usage.md)
@@ -196,21 +212,6 @@ reqlog --follow --key request_id abc123
 | Service context    | ❌        | ✅          |
 
 `reqlog = grep for distributed systems`
-
-## Features
-
-- Key-based search (`--key request_id`)
-- Supports plain text and JSON logs
-- Flexible timestamp parsing (RFC3339, RFC3339Nano, Unix timestamps)
-- Time filtering with `--since`
-- Docker logs support
-- Filter by service (`--service`, supports wildcards)
-- Context around matches (`--context`)
-- Optimized for large log files
-- Structured JSON output (`--output=json`)
-- Colored multi-service timeline output
-- Live log tailing (`--follow`)
-- Works across multiple files and directories
 
 ## Supported Log Formats
 
@@ -262,8 +263,8 @@ Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 - [x] Optimize `--limit` (early exit / streaming)
 - [x] `--latest` flag (Return latest N entries globally)
 - [x] `--context` flag (show surrounding lines)
-- [ ] `--fields` flag for JSON logs
 - [x] `--output=json` for piping and integrations
+- [ ] `--fields` flag for JSON logs
 
 **Performance & Scalability**
 
@@ -274,7 +275,7 @@ Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 
 - [x] File logs
 - [x] Docker logs
-- [ ] Kubernetes logs
+- [ ] SSH-based multi-host logs?
 
 > Companion web UI for reqlog: https://github.com/sagarmaheshwary/reqlog-ui
 
