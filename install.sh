@@ -7,6 +7,9 @@ INSTALL_PATH="/usr/local/bin/reqlog"
 
 echo "Installing reqlog..."
 
+# Version argument
+VERSION="${1:-latest}"
+
 # Detect OS
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -33,13 +36,20 @@ esac
 BINARY="reqlog-${PLATFORM}-${ARCH}"
 TAR_FILE="${BINARY}.tar.gz"
 
-LATEST=$(curl -s https://api.github.com/repos/$REPO/releases/latest | grep tag_name | cut -d '"' -f 4)
+# Resolve release version
+if [ "$VERSION" = "latest" ]; then
+  VERSION=$(curl -s \
+    "https://api.github.com/repos/$REPO/releases/latest" |
+    grep tag_name |
+    cut -d '"' -f 4)
+fi
 
-URL="https://github.com/$REPO/releases/download/$LATEST/${TAR_FILE}"
+URL="https://github.com/$REPO/releases/download/$VERSION/${TAR_FILE}"
 
-echo "Downloading $BINARY..."
+echo "Downloading $BINARY ($VERSION)..."
 
-curl -L "$URL" -o "$TAR_FILE"
+curl -fL "$URL" -o "$TAR_FILE"
+
 tar -xzf "$TAR_FILE"
 
 chmod +x "$BINARY"
@@ -47,4 +57,4 @@ sudo mv "$BINARY" "$INSTALL_PATH"
 
 rm "$TAR_FILE"
 
-echo "Installed reqlog at $INSTALL_PATH"
+echo "Installed reqlog $VERSION at $INSTALL_PATH"
