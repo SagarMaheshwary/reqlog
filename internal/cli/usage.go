@@ -6,7 +6,7 @@ import (
 )
 
 func Usage() {
-	fmt.Fprintf(flag.CommandLine.Output(), `reqlog - Search and trace requests across microservices, files, and Docker logs — fast.
+	fmt.Fprintf(flag.CommandLine.Output(), `reqlog - Search and trace requests across files, Docker, and SSH logs — fast.
 
 Usage:
   reqlog [flags] <search_value>
@@ -15,6 +15,8 @@ Examples:
   reqlog abc123
   reqlog -k request_id abc123
   reqlog -S docker -s order-service abc123
+  reqlog -H srv1 -d /path/to/logs abc123
+  reqlog --config ~/.config/reqlog/config.yaml -H srv1 -d /path/to/logs abc123
   reqlog -f -o json abc123 | jq
 
 Flags:
@@ -55,6 +57,12 @@ Flags:
   -S, --source string
         log source backend ("file" or "docker")
         (default "file")
+
+  -H, --host string
+        SSH host alias from config file
+
+      --config string
+        path to SSH config file
 
   -c, --context int
         show N lines of context before and after each match
