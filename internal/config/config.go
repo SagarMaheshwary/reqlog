@@ -40,6 +40,9 @@ type Config struct {
 
 	Output OutputFormat
 	Format LogFormat
+
+	Host   string
+	Config *SSH
 }
 
 var DefaultKeys = []string{

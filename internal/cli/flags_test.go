@@ -76,38 +76,73 @@ func TestNormalizeArgs(t *testing.T) {
 }
 
 func TestApplyDerivedConfig(t *testing.T) {
-	cfg := &config.Config{}
+	t.Run("applies derived values", func(t *testing.T) {
+		cfg := &config.Config{}
 
-	opts := &flagOptions{
-		key:     "trace_id",
-		service: "auth,db",
-		source:  "docker",
-		output:  "json",
-		format:  "text",
-	}
+		opts := &flagOptions{
+			key:     "trace_id",
+			service: "auth,db",
+			source:  "docker",
+			output:  "json",
+			format:  "text",
+		}
 
-	applyDerivedConfig(cfg, opts)
+		err := applyDerivedConfig(cfg, opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-	if !reflect.DeepEqual(cfg.Keys, []string{"trace_id"}) {
-		t.Fatalf("keys: expected %v got %v", []string{"trace_id"}, cfg.Keys)
-	}
+		if !reflect.DeepEqual(cfg.Keys, []string{"trace_id"}) {
+			t.Fatalf("keys: expected %v got %v", []string{"trace_id"}, cfg.Keys)
+		}
 
-	if !reflect.DeepEqual(cfg.Services, []string{"auth", "db"}) {
-		t.Fatalf("services: expected %v got %v", []string{"auth", "db"}, cfg.Services)
-	}
+		if !reflect.DeepEqual(cfg.Services, []string{"auth", "db"}) {
+			t.Fatalf("services: expected %v got %v", []string{"auth", "db"}, cfg.Services)
+		}
 
-	if cfg.Source != config.SourceDocker {
-		t.Fatalf("source: expected %v got %v", config.SourceDocker, cfg.Source)
-	}
+		if cfg.Source != config.SourceDocker {
+			t.Fatalf("source: expected %v got %v", config.SourceDocker, cfg.Source)
+		}
 
-	if cfg.Output != config.OutputJSON {
-		t.Fatalf("output: expected %v got %v", config.OutputJSON, cfg.Output)
-	}
+		if cfg.Output != config.OutputJSON {
+			t.Fatalf("output: expected %v got %v", config.OutputJSON, cfg.Output)
+		}
 
-	if cfg.Format != config.FormatText {
-		t.Fatalf("format: expected %v got %v", config.FormatText, cfg.Format)
-	}
+		if cfg.Format != config.FormatText {
+			t.Fatalf("format: expected %v got %v", config.FormatText, cfg.Format)
+		}
+	})
+
+	t.Run("uses default keys when key not provided", func(t *testing.T) {
+		cfg := &config.Config{}
+		opts := &flagOptions{}
+
+		err := applyDerivedConfig(cfg, opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !reflect.DeepEqual(cfg.Keys, config.DefaultKeys) {
+			t.Fatalf("keys: expected %v got %v", config.DefaultKeys, cfg.Keys)
+		}
+	})
+
+	t.Run("returns ssh config error when host is set", func(t *testing.T) {
+		cfg := &config.Config{
+			Host: "prod",
+		}
+
+		opts := &flagOptions{
+			config: "/does/not/exist.yaml",
+		}
+
+		err := applyDerivedConfig(cfg, opts)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }
+
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
 		name    string

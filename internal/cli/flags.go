@@ -15,6 +15,7 @@ type flagOptions struct {
 	source  string
 	output  string
 	format  string
+	config  string
 }
 
 func ParseConfig() (*config.Config, error) {
@@ -27,7 +28,9 @@ func ParseConfig() (*config.Config, error) {
 		return nil, err
 	}
 
-	applyDerivedConfig(cfg, opts)
+	if err := applyDerivedConfig(cfg, opts); err != nil {
+		return nil, err
+	}
 
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
@@ -151,10 +154,26 @@ func registerFlags(cfg *config.Config) *flagOptions {
 		`log parsing format ("auto", "json", or "text")`,
 	)
 
+	stringFlag(
+		&opts.config,
+		"config",
+		"",
+		"",
+		"path to SSH config file",
+	)
+
+	stringFlag(
+		&cfg.Host,
+		"host",
+		"H",
+		"",
+		"SSH host alias from config file",
+	)
+
 	return opts
 }
 
-func applyDerivedConfig(cfg *config.Config, opts *flagOptions) {
+func applyDerivedConfig(cfg *config.Config, opts *flagOptions) error {
 	cfg.Keys = config.DefaultKeys
 
 	if opts.key != "" {
@@ -168,6 +187,16 @@ func applyDerivedConfig(cfg *config.Config, opts *flagOptions) {
 	cfg.Source = config.Source(opts.source)
 	cfg.Output = config.OutputFormat(opts.output)
 	cfg.Format = config.LogFormat(opts.format)
+
+	if cfg.Host != "" {
+		var err error
+		cfg.Config, err = config.NewSSH(opts.config)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func validateConfig(cfg *config.Config) error {
