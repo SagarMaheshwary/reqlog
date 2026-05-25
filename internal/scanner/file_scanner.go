@@ -91,6 +91,10 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 				}
 			}
 
+			stat, err := file.Stat()
+			if err == nil {
+				offset = stat.Size()
+			}
 			return offset, nil
 		}()
 
