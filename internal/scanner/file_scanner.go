@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
+	"github.com/sagarmaheshwary/reqlog/internal/transport"
 )
 
 type FileScanner struct {
@@ -21,26 +21,34 @@ type FileScanner struct {
 	out            io.Writer
 	errOut         io.Writer
 	now            time.Time
+	fsys           transport.FileSystem
+	host           string
 }
 
-func NewFileScanner(
-	lp *LineProcessor,
-	followInterval time.Duration,
-	out io.Writer,
-	errOut io.Writer,
-	now time.Time,
-) *FileScanner {
+type FileScannerOpts struct {
+	LineProcessor  *LineProcessor
+	FollowInterval time.Duration
+	Out            io.Writer
+	ErrOut         io.Writer
+	Now            time.Time
+	FS             transport.FileSystem
+	Host           string
+}
+
+func NewFileScanner(opts *FileScannerOpts) *FileScanner {
 	return &FileScanner{
 		offsets:        make(map[string]int64),
-		lineProcessor:  lp,
-		followInterval: followInterval,
-		out:            out,
-		errOut:         errOut,
-		now:            now,
+		lineProcessor:  opts.LineProcessor,
+		followInterval: opts.FollowInterval,
+		out:            opts.Out,
+		errOut:         opts.ErrOut,
+		now:            opts.Now,
+		fsys:           opts.FS,
+		host:           opts.Host,
 	}
 }
 
-func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
+func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEntry, error) {
 	cfg := fs.lineProcessor.config
 
 	collector, err := NewEntryCollector(cfg, fs.now)
@@ -49,7 +57,7 @@ func (fs *FileScanner) Scan(files []string) ([]domain.LogEntry, error) {
 	}
 
 	for _, path := range files {
-		file, err := os.Open(path)
+		file, err := fs.fsys.Open(ctx, path)
 		if err != nil {
 			logScanError(fs.errOut, path, err)
 			continue
@@ -119,14 +127,14 @@ func (fs *FileScanner) Follow(ctx context.Context, files []string, f formatter.L
 
 		case <-ticker.C:
 			for _, path := range files {
-				fs.processFile(path, f)
+				fs.processFile(ctx, path, f)
 			}
 		}
 	}
 }
 
-func (fs *FileScanner) processFile(path string, f formatter.LogFormatter) {
-	file, err := os.Open(path)
+func (fs *FileScanner) processFile(ctx context.Context, path string, f formatter.LogFormatter) {
+	file, err := fs.fsys.Open(ctx, path)
 	if err != nil {
 		logScanError(fs.errOut, path, err)
 		return
@@ -134,7 +142,6 @@ func (fs *FileScanner) processFile(path string, f formatter.LogFormatter) {
 	defer file.Close()
 
 	service := strings.TrimSuffix(filepath.Base(path), ".log")
-
 	offset := fs.offsets[path]
 
 	_, err = file.Seek(offset, io.SeekStart)
@@ -169,126 +176,19 @@ func (fs *FileScanner) processFile(path string, f formatter.LogFormatter) {
 	fs.offsets[path] = offset
 }
 
-func (fs *FileScanner) ListSources() ([]string, error) {
+func (fs *FileScanner) ListSources(ctx context.Context) ([]string, error) {
 	cfg := fs.lineProcessor.config
 
-	matcher := buildServiceMatcher(cfg.Services)
-
-	if cfg.Recursive {
-		return fs.listRecursive(cfg.Dir, matcher)
-	}
-
-	return fs.listFlat(cfg.Dir, matcher)
-}
-
-func (fs *FileScanner) listRecursive(
-	dir string,
-	matchesService func(string) bool,
-) ([]string, error) {
-	files := make([]string, 0, 16)
-
-	err := filepath.WalkDir(
-		dir,
-		func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				logScanError(fs.errOut, path, err)
-				return nil // continue walking
-			}
-
-			if d.IsDir() {
-				return nil
-			}
-
-			name := d.Name()
-
-			if !isLogFile(name) {
-				return nil
-			}
-
-			if !matchesService(name) {
-				return nil
-			}
-
-			files = append(files, path)
-
-			return nil
+	files, err := fs.fsys.ListFiles(ctx, cfg.Dir, transport.ListOptions{
+		Recursive: cfg.Recursive,
+		Services:  cfg.Services,
+		OnError: func(path string, err error) {
+			logScanError(fs.errOut, path, err)
 		},
-	)
-
-	return files, err
-}
-
-func (fs *FileScanner) listFlat(
-	dir string,
-	matchesService func(string) bool,
-) ([]string, error) {
-	entries, err := os.ReadDir(dir)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	files := make([]string, 0, 16)
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-
-		if !isLogFile(name) {
-			continue
-		}
-
-		if !matchesService(name) {
-			continue
-		}
-
-		files = append(files, filepath.Join(dir, name))
-	}
-
 	return files, nil
-}
-
-func buildServiceMatcher(services []string) func(string) bool {
-	exact := map[string]struct{}{}
-	prefixes := []string{}
-
-	for _, s := range services {
-		s = strings.TrimSpace(s)
-
-		if s == "" {
-			continue
-		}
-
-		if before, ok := strings.CutSuffix(s, "*"); ok {
-			prefixes = append(prefixes, before)
-		} else {
-			exact[s] = struct{}{}
-		}
-	}
-
-	return func(name string) bool {
-		if len(exact) == 0 && len(prefixes) == 0 {
-			return true
-		}
-
-		name = strings.TrimSuffix(name, ".log")
-
-		if _, ok := exact[name]; ok {
-			return true
-		}
-
-		for _, p := range prefixes {
-			if strings.HasPrefix(name, p) {
-				return true
-			}
-		}
-
-		return false
-	}
-}
-
-func isLogFile(name string) bool {
-	return strings.HasSuffix(name, ".log")
 }

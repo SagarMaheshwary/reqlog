@@ -6,49 +6,44 @@ import (
 	"github.com/sagarmaheshwary/reqlog/internal/config"
 )
 
-func TestNewScanner(t *testing.T) {
-	cfg := &Config{}
-	lp := NewLineProcessor(cfg, NewTimeParser())
+func TestNew(t *testing.T) {
+	lp := &LineProcessor{}
 
 	tests := []struct {
-		name    string
-		source  config.Source
-		wantErr bool
-		check   func(t *testing.T, s Scanner)
+		name      string
+		source    config.Source
+		wantType  any
+		wantError bool
 	}{
 		{
-			name:   "file source",
-			source: config.SourceFile,
-			check: func(t *testing.T, s Scanner) {
-				if _, ok := s.(*FileScanner); !ok {
-					t.Fatalf("expected *FileScanner")
-				}
-			},
+			name:     "file scanner",
+			source:   config.SourceFile,
+			wantType: &FileScanner{},
 		},
 		{
-			name:   "docker source",
-			source: config.SourceDocker,
-			check: func(t *testing.T, s Scanner) {
-				if _, ok := s.(*DockerScanner); !ok {
-					t.Fatalf("expected *DockerScanner")
-				}
-			},
+			name:     "docker scanner",
+			source:   config.SourceDocker,
+			wantType: &DockerScanner{},
 		},
 		{
-			name:    "unknown source",
-			source:  "unknown",
-			wantErr: true,
+			name:      "unknown source",
+			source:    config.Source("invalid"),
+			wantError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, err := New(tt.source, lp)
+			scanner, err := New(&FactoryOpts{
+				Source:        tt.source,
+				LineProcessor: lp,
+			})
 
-			if tt.wantErr {
+			if tt.wantError {
 				if err == nil {
-					t.Fatalf("expected error, got nil")
+					t.Fatal("expected error")
 				}
+
 				return
 			}
 
@@ -56,12 +51,16 @@ func TestNewScanner(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if s == nil {
-				t.Fatalf("expected scanner, got nil")
-			}
+			switch tt.wantType.(type) {
+			case *FileScanner:
+				if _, ok := scanner.(*FileScanner); !ok {
+					t.Fatalf("expected *FileScanner got %T", scanner)
+				}
 
-			if tt.check != nil {
-				tt.check(t, s)
+			case *DockerScanner:
+				if _, ok := scanner.(*DockerScanner); !ok {
+					t.Fatalf("expected *DockerScanner got %T", scanner)
+				}
 			}
 		})
 	}

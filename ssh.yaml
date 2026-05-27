@@ -1,0 +1,13 @@
+version: 1
+
+hosts:
+  srv1:
+    host: 192.168.1.101
+    user: sagar
+    key: ~/.ssh/id_rsa
+
+  srv2:
+    host: prod-api.internal
+    user: ec2-user
+    port: 2222
+    key: ~/.ssh/prod.pem

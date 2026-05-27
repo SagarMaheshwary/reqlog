@@ -20,24 +20,30 @@ type DockerScanner struct {
 	out           io.Writer
 	errOut        io.Writer
 	now           time.Time
+	host          string
 }
 
-func NewDockerScanner(lp *LineProcessor,
-	client docker.DockerClient,
-	out io.Writer,
-	errOut io.Writer,
-	now time.Time,
-) *DockerScanner {
+type DockerScannerOpts struct {
+	LineProcessor *LineProcessor
+	dockerClient  docker.DockerClient
+	Out           io.Writer
+	ErrOut        io.Writer
+	Now           time.Time
+	Host          string
+}
+
+func NewDockerScanner(opts *DockerScannerOpts) *DockerScanner {
 	return &DockerScanner{
-		lineProcessor: lp,
-		dockerClient:  client,
-		out:           out,
-		errOut:        errOut,
-		now:           now,
+		lineProcessor: opts.LineProcessor,
+		dockerClient:  opts.dockerClient,
+		out:           opts.Out,
+		errOut:        opts.ErrOut,
+		now:           opts.Now,
+		host:          opts.Host,
 	}
 }
 
-func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
+func (ds *DockerScanner) Scan(ctx context.Context, containers []string) ([]domain.LogEntry, error) {
 	cfg := ds.lineProcessor.config
 
 	collector, err := NewEntryCollector(cfg, ds.now)
@@ -57,19 +63,33 @@ func (ds *DockerScanner) Scan(containers []string) ([]domain.LogEntry, error) {
 			collector.StartSource()
 			engine := NewContextEngine(ds.lineProcessor, collector, cfg.Context)
 
-			scanner := bufio.NewScanner(reader)
-			for scanner.Scan() {
-				line := scanner.Text()
+			if ds.host != "" {
+				container = ds.host + ":" + container
+			}
 
-				entry, ok := ds.lineProcessor.ProcessLine(line, container)
-				continueReading := engine.Handle(ContextLine{
-					Line:    line,
-					Service: container,
-					Entry:   entry,
-					IsMatch: ok,
-				})
-				if !continueReading {
-					break
+			r := bufio.NewReader(reader)
+			for {
+				line, err := r.ReadString('\n')
+
+				if len(line) > 0 {
+					entry, ok := ds.lineProcessor.ProcessLine(line, container)
+					continueReading := engine.Handle(ContextLine{
+						Line:    line,
+						Service: container,
+						Entry:   entry,
+						IsMatch: ok,
+					})
+					if !continueReading {
+						break
+					}
+				}
+
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					logScanError(ds.errOut, container, err)
+					return
 				}
 			}
 		}()
@@ -93,12 +113,27 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 			}
 			defer reader.Close()
 
-			scanner := bufio.NewScanner(reader)
-			for scanner.Scan() {
-				line := scanner.Text()
-				entry, ok := ds.lineProcessor.ProcessLine(line, container)
-				if ok {
-					fmt.Fprintln(ds.out, f.Format(*entry))
+			if ds.host != "" {
+				container = ds.host + ":" + container
+			}
+
+			r := bufio.NewReader(reader)
+			for {
+				line, err := r.ReadString('\n')
+
+				if len(line) > 0 {
+					entry, ok := ds.lineProcessor.ProcessLine(line, container)
+					if ok {
+						fmt.Fprintln(ds.out, f.Format(*entry))
+					}
+				}
+
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					logScanError(ds.errOut, container, err)
+					return
 				}
 			}
 		}(container)
@@ -116,7 +151,7 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 	}
 }
 
-func (ds *DockerScanner) ListSources() ([]string, error) {
+func (ds *DockerScanner) ListSources(ctx context.Context) ([]string, error) {
 	containers, err := ds.dockerClient.ListContainers()
 	if err != nil {
 		return nil, err
