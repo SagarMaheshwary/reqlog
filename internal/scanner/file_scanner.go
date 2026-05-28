@@ -79,10 +79,11 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 				if len(line) > 0 {
 					offset += int64(len(line))
 
-					entry, ok := fs.lineProcessor.ProcessLine(line, service)
+					entry, ok := fs.lineProcessor.ProcessLine(line, service, fs.host)
 					continueReading := engine.Handle(ContextLine{
 						Line:    line,
 						Service: service,
+						Host:    fs.host,
 						Entry:   entry,
 						IsMatch: ok,
 					})
@@ -158,7 +159,7 @@ func (fs *FileScanner) processFile(ctx context.Context, path string, f formatter
 		if len(line) > 0 {
 			offset += int64(len(line))
 
-			entry, ok := fs.lineProcessor.ProcessLine(line, service)
+			entry, ok := fs.lineProcessor.ProcessLine(line, service, fs.host)
 			if ok {
 				fmt.Fprintln(fs.out, f.Format(*entry))
 			}

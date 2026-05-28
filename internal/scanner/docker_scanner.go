@@ -63,19 +63,16 @@ func (ds *DockerScanner) Scan(ctx context.Context, containers []string) ([]domai
 			collector.StartSource()
 			engine := NewContextEngine(ds.lineProcessor, collector, cfg.Context)
 
-			if ds.host != "" {
-				container = ds.host + ":" + container
-			}
-
 			r := bufio.NewReader(reader)
 			for {
 				line, err := r.ReadString('\n')
 
 				if len(line) > 0 {
-					entry, ok := ds.lineProcessor.ProcessLine(line, container)
+					entry, ok := ds.lineProcessor.ProcessLine(line, container, ds.host)
 					continueReading := engine.Handle(ContextLine{
 						Line:    line,
 						Service: container,
+						Host:    ds.host,
 						Entry:   entry,
 						IsMatch: ok,
 					})
@@ -122,7 +119,7 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 				line, err := r.ReadString('\n')
 
 				if len(line) > 0 {
-					entry, ok := ds.lineProcessor.ProcessLine(line, container)
+					entry, ok := ds.lineProcessor.ProcessLine(line, container, ds.host)
 					if ok {
 						fmt.Fprintln(ds.out, f.Format(*entry))
 					}

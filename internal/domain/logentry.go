@@ -9,4 +9,5 @@ type LogEntry struct {
 	IsContext bool
 	Fields    map[string]any
 	Raw       string
+	Host      string
 }
