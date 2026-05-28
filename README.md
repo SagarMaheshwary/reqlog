@@ -1,8 +1,8 @@
 # reqlog
 
 <p align="center">
-  <b>Search and trace requests across microservices, files, and Docker logs — fast.</b><br/>
-  Debug distributed systems using simple key/value search (e.g. request_id, trace_id) without relying on centralized tracing.
+  <b>Search and trace requests across files, Docker logs, and remote hosts.</b><br/>
+  Debug distributed systems from your terminal using simple key/value search without relying on centralized tracing.
 </p>
 
 <p align="center">
@@ -62,6 +62,7 @@ reqlog -v
 ## Quick Start
 
 Search logs using common request tracing keys like:
+
 `request_id`, `req_id`, `trace_id`, and `correlation_id`.
 
 Search log files:
@@ -75,6 +76,14 @@ Search Docker containers:
 ```bash
 reqlog -S docker abc123
 ```
+
+Search remote hosts over SSH:
+
+```bash
+reqlog -H srv1,srv2 abc123
+```
+
+> Remote host search requires `config.yaml` configuration. See **Remote Logs over SSH** below.
 
 Example output:
 
@@ -96,7 +105,8 @@ reqlog [flags] <search_value>
 reqlog abc123
 ```
 
-> reqlog searches `./logs` by default.
+> reqlog searches `./logs` by default. Use `-d` to search a specific directory.<br>
+> JSON logs are detected automatically.
 
 **Key-Based Search**
 
@@ -105,26 +115,62 @@ reqlog -k request_id abc123
 reqlog -k event_key order.created
 ```
 
-**Log Format Detection**
-
-reqlog automatically detects JSON logs by default.
-
-```bash
-reqlog -k trace_id trace-123
-```
-
-Force JSON or text parsing explicitly when needed:
-
-```bash
-reqlog --format json abc123
-reqlog --format text abc123
-```
-
 **Docker Logs**
 
 ```bash
 reqlog -S docker -s api-gateway abc123
 ```
+
+**Remote Logs over SSH**
+
+Search logs across remote hosts using SSH by defining hosts in `config.yaml`.
+
+Place `config.yaml` in one of the following locations:
+
+- macOS/Linux: `~/.config/reqlog/config.yaml`
+- Windows: `%APPDATA%\reqlog\config.yaml`
+
+Example `config.yaml`:
+
+```yaml
+version: 1
+
+defaults:
+  key: ~/.ssh/id_rsa
+  timeout: 30s
+
+hosts:
+  srv1:
+    host: 10.0.0.10
+    user: ubuntu
+
+  srv2:
+    host: 10.0.0.11
+    user: ec2-user
+    port: 2222
+    key: ~/.ssh/prod.pem
+    timeout: 60s
+```
+
+Search logs on a single remote host:
+
+```bash
+reqlog -H srv1 abc123
+```
+
+Search across multiple hosts:
+
+```bash
+reqlog -H srv1,srv2 abc123
+```
+
+Search Docker logs on remote hosts:
+
+```bash
+reqlog -H srv1,srv2 -S docker abc123
+```
+
+> Host names passed to `-H` must match entries under `hosts` in `config.yaml`.
 
 **Service Filtering**
 
@@ -203,15 +249,16 @@ reqlog -f abc123
 
 ## Why not just use `grep`?
 
-| Problem            | grep      | reqlog      |
-| ------------------ | --------- | ----------- |
-| Multi-file search  | ⚠️ manual | ✅ built-in |
-| Request tracing    | ❌        | ✅          |
-| JSON logs          | ❌        | ✅          |
-| Chronological flow | ❌        | ✅          |
-| Service context    | ❌        | ✅          |
+| Problem                         |      grep |      reqlog |
+| ------------------------------- | --------: | ----------: |
+| Multi-file search               | ⚠️ manual | ✅ built-in |
+| Multi-host / SSH log search     |        ❌ |          ✅ |
+| Request tracing across services |        ❌ |          ✅ |
+| JSON log search                 |        ❌ |          ✅ |
+| Chronological request flow      |        ❌ |          ✅ |
+| Service-aware context           |        ❌ |          ✅ |
 
-`reqlog = grep for distributed systems`
+> `reqlog = grep for distributed systems`
 
 ## Supported Log Formats
 
@@ -275,7 +322,7 @@ Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 
 - [x] File logs
 - [x] Docker logs
-- [ ] SSH-based multi-host logs?
+- [x] SSH-based multi-host logs
 
 > Companion web UI for reqlog: https://github.com/sagarmaheshwary/reqlog-ui
 
