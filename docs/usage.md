@@ -5,6 +5,7 @@
 - [Basic Syntax](#basic-syntax)
 - [Flags](#flags)
 - [Common Workflows](#common-workflows)
+- [Remote Logs Over SSH](#remote-logs-over-ssh)
 - [JSON Output](#json-output)
 - [Supported Log Formats](#supported-log-formats)
 - [Supported Timestamp Formats](#supported-timestamp-formats)
@@ -206,6 +207,67 @@ Disable recursive directory scanning:
 
 ```bash
 reqlog --recursive=false abc123
+```
+
+## Remote Logs Over SSH
+
+Search logs across remote hosts using SSH by defining hosts in `config.yaml`.
+
+Place `config.yaml` in one of the following locations:
+
+- macOS/Linux: `~/.config/reqlog/config.yaml`
+- Windows: `%APPDATA%\reqlog\config.yaml`
+
+**Example `config.yaml`**
+
+```yaml
+version: 1
+
+defaults:
+  key: ~/.ssh/id_rsa
+  timeout: 30s
+
+hosts:
+  srv1:
+    host: 10.0.0.10
+    user: ubuntu
+
+  srv2:
+    host: 10.0.0.11
+    user: ec2-user
+    port: 2222
+    key: ~/.ssh/prod.pem
+    timeout: 60s
+```
+
+Search logs on a single remote host:
+
+```bash
+reqlog -H srv1 abc123
+```
+
+Search across multiple hosts:
+
+```bash
+reqlog -H srv1,srv2 abc123
+```
+
+Search Docker logs on remote hosts:
+
+```bash
+reqlog -H srv1,srv2 -S docker abc123
+```
+
+> Host names passed to `-H` must match entries under `hosts` in `config.yaml`.
+>
+> SSH logs include host context in outputs:
+> - Pretty output: `[host:service]`
+> - JSON output includes a `host` field
+
+Specify a custom config file:
+
+```
+reqlog --config ./config.yaml -H srv1 abc123
 ```
 
 ## JSON Output
