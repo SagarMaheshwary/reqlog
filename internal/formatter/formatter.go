@@ -67,7 +67,7 @@ func (f *Formatter) Format(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) outputJSON(entry domain.LogEntry) string {
-	out := make(map[string]any, len(entry.Fields)+5)
+	out := make(map[string]any, len(entry.Fields)+6)
 
 	out["timestamp"] = entry.Timestamp.Format(time.RFC3339Nano)
 	out["service"] = entry.Service
@@ -76,11 +76,14 @@ func (f *Formatter) outputJSON(entry domain.LogEntry) string {
 	if f.context > 0 {
 		out["context"] = entry.IsContext
 	}
+	if entry.Host != "" {
+		out["host"] = entry.Host
+	}
 
 	for k, v := range entry.Fields {
 		// avoid accidental overwrite of core keys
 		switch k {
-		case "timestamp", "service", "message", "context":
+		case "timestamp", "service", "message", "context", "host":
 			out["fields."+k] = v
 		default:
 			out[k] = v
@@ -112,6 +115,12 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 		msg = dim + msg + reset
 	}
 
+	service := entry.Service
+
+	if entry.Host != "" {
+		service = entry.Host + ":" + entry.Service
+	}
+
 	return fmt.Sprintf(
 		"%s%s%s%s %s[%s]%s%s | %s%s%s",
 		dim,
@@ -120,7 +129,7 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 		reset,
 
 		serviceColor,
-		entry.Service,
+		service,
 		reset,
 		padding,
 

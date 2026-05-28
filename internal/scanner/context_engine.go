@@ -16,6 +16,7 @@ type contextEngine struct {
 type ContextLine struct {
 	Line    string
 	Service string
+	Host    string
 	Entry   *domain.LogEntry
 	IsMatch bool
 }
@@ -59,7 +60,7 @@ func (c *contextEngine) Handle(in ContextLine) bool {
 		return true
 	}
 
-	entry, ok := c.lineProcessor.Parse(in.Line, in.Service, true)
+	entry, ok := c.lineProcessor.Parse(in.Line, in.Service, in.Host, true)
 	if !ok {
 		return true
 	}

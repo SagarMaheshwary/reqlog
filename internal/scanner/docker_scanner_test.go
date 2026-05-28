@@ -26,7 +26,13 @@ func dockerLogs(lines []string) io.ReadCloser {
 
 func newTestDockerScanner(cfg *Config, client docker.DockerClient) *DockerScanner {
 	lp := NewLineProcessor(cfg, NewTimeParser())
-	return NewDockerScanner(lp, client, io.Discard, io.Discard, time.Now())
+	return NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: lp,
+		Out:           io.Discard,
+		ErrOut:        io.Discard,
+		Now:           time.Now(),
+		dockerClient:  client,
+	})
 }
 
 func TestDockerScanner_Scan(t *testing.T) {
@@ -118,9 +124,15 @@ func TestDockerScanner_Scan(t *testing.T) {
 
 			lp := NewLineProcessor(tt.cfg, NewTimeParser())
 			var out, errOut bytes.Buffer
-			ds := NewDockerScanner(lp, mock, &out, &errOut, time.Now())
+			ds := NewDockerScanner(&DockerScannerOpts{
+				LineProcessor: lp,
+				Out:           &out,
+				ErrOut:        &errOut,
+				Now:           time.Now(),
+				dockerClient:  mock,
+			})
 
-			results, err := ds.Scan(tt.containers)
+			results, err := ds.Scan(t.Context(), tt.containers)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -147,7 +159,7 @@ func TestDockerScanner_Scan_InvalidSince(t *testing.T) {
 
 	ds := newTestDockerScanner(cfg, &mockDockerClient{})
 
-	_, err := ds.Scan([]string{"auth"})
+	_, err := ds.Scan(t.Context(), []string{"auth"})
 	if err == nil {
 		t.Fatalf("expected error, got %v", err)
 	}
@@ -206,7 +218,7 @@ func TestDockerScanner_Scan_JSON(t *testing.T) {
 
 			ds := newTestDockerScanner(cfg, mock)
 
-			results, err := ds.Scan([]string{tt.container})
+			results, err := ds.Scan(t.Context(), []string{tt.container})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -257,9 +269,15 @@ func TestDockerScanner_Scan_Latest(t *testing.T) {
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	var out, errOut bytes.Buffer
-	ds := NewDockerScanner(lp, mock, &out, &errOut, time.Now())
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: lp,
+		Out:           &out,
+		ErrOut:        &errOut,
+		Now:           time.Now(),
+		dockerClient:  mock,
+	})
 
-	results, err := ds.Scan([]string{"a", "b"})
+	results, err := ds.Scan(t.Context(), []string{"a", "b"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,15 +335,15 @@ func TestDockerScanner_Scan_Context(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	ds := NewDockerScanner(
-		lp,
-		mock,
-		&out,
-		&errOut,
-		time.Now(),
-	)
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: lp,
+		Out:           &out,
+		ErrOut:        &errOut,
+		Now:           time.Now(),
+		dockerClient:  mock,
+	})
 
-	results, err := ds.Scan([]string{"auth"})
+	results, err := ds.Scan(t.Context(), []string{"auth"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +436,7 @@ func TestDockerScanner_ListSources(t *testing.T) {
 
 			ds := newTestDockerScanner(cfg, mock)
 
-			got, err := ds.ListSources()
+			got, err := ds.ListSources(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -441,7 +459,7 @@ func TestDockerScanner_ListSources_Error(t *testing.T) {
 	}
 	ds := newTestDockerScanner(&Config{}, mock)
 
-	_, err := ds.ListSources()
+	_, err := ds.ListSources(t.Context())
 	if err == nil {
 		t.Fatalf("expected error, got %v", err)
 	}
@@ -521,9 +539,15 @@ func TestDockerScanner_Follow(t *testing.T) {
 			}
 
 			var out bytes.Buffer
-			ds := NewDockerScanner(lp, client, &out, io.Discard, time.Now())
+			ds := NewDockerScanner(&DockerScannerOpts{
+				LineProcessor: lp,
+				Out:           &out,
+				ErrOut:        io.Discard,
+				Now:           time.Now(),
+				dockerClient:  client,
+			})
 
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 			defer cancel()
 
 			ds.Follow(ctx, tt.containers, &testFormatter{})
@@ -566,9 +590,15 @@ func TestDockerScanner_Follow_Errors(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 
-	ds := NewDockerScanner(lp, client, &out, &errOut, time.Now())
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: lp,
+		Out:           &out,
+		ErrOut:        &errOut,
+		Now:           time.Now(),
+		dockerClient:  client,
+	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	f := formatter.NewFormatter(&formatter.Opts{

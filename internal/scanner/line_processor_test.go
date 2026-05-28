@@ -77,7 +77,7 @@ func TestLineProcessor_ProcessLine_TextMode(t *testing.T) {
 
 			lp := NewLineProcessor(cfg, tp)
 
-			entry, ok := lp.ProcessLine(tt.line, "svc")
+			entry, ok := lp.ProcessLine(tt.line, "svc", "")
 
 			if ok != tt.expectOK {
 				t.Fatalf("expected ok=%v, got %v", tt.expectOK, ok)
@@ -174,7 +174,7 @@ func TestLineProcessor_ProcessLine_JSONMode(t *testing.T) {
 
 			lp := NewLineProcessor(cfg, tp)
 
-			entry, ok := lp.ProcessLine(tt.line, "svc")
+			entry, ok := lp.ProcessLine(tt.line, "svc", "")
 
 			if ok != tt.expectOK {
 				t.Fatalf("expected ok=%v, got %v", tt.expectOK, ok)
@@ -195,19 +195,23 @@ func TestLineProcessor_Parse(t *testing.T) {
 		cfg       *Config
 		line      string
 		service   string
+		host      string
 		wantOK    bool
 		wantMsg   string
 		wantSvc   string
+		wantHost  string
 		wantIsNil bool
 	}{
 		{
-			name:    "valid text log",
-			cfg:     &Config{},
-			line:    "2024-03-10T12:00:00Z some message user=999 status=ok",
-			service: "auth",
-			wantOK:  true,
-			wantMsg: "some message",
-			wantSvc: "auth",
+			name:     "valid text log",
+			cfg:      &Config{},
+			line:     "2024-03-10T12:00:00Z some message user=999 status=ok",
+			service:  "auth",
+			host:     "srv1",
+			wantOK:   true,
+			wantMsg:  "some message",
+			wantSvc:  "auth",
+			wantHost: "srv1",
 		},
 		{
 			name:      "invalid timestamp",
@@ -271,7 +275,7 @@ func TestLineProcessor_Parse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			lp := NewLineProcessor(tt.cfg, NewTimeParser())
 
-			entry, ok := lp.Parse(tt.line, tt.service, true)
+			entry, ok := lp.Parse(tt.line, tt.service, tt.host, true)
 
 			if ok != tt.wantOK {
 				t.Fatalf("expected ok=%v, got %v", tt.wantOK, ok)
@@ -304,6 +308,14 @@ func TestLineProcessor_Parse(t *testing.T) {
 				)
 			}
 
+			if entry.Host != tt.wantHost {
+				t.Fatalf(
+					"expected host %q, got %q",
+					tt.wantHost,
+					entry.Host,
+				)
+			}
+
 			if entry.Timestamp.IsZero() {
 				t.Fatal("expected non-zero timestamp")
 			}
@@ -324,14 +336,14 @@ func TestLineProcessor_JSONTimestampKeyCaching(t *testing.T) {
 
 	// First line: timestamp key = "timestamp"
 	line1 := `{"request_id":"abc","timestamp":"2024-03-10T12:00:00Z"}`
-	_, ok := lp.ProcessLine(line1, "svc")
+	_, ok := lp.ProcessLine(line1, "svc", "")
 	if !ok {
 		t.Fatalf("expected first parse success")
 	}
 
 	// Second line: timestamp moved → should FAIL due to cached key
 	line2 := `{"request_id":"abc","time":"2024-03-10T12:00:00Z"}`
-	_, ok = lp.ProcessLine(line2, "svc")
+	_, ok = lp.ProcessLine(line2, "svc", "")
 	if ok {
 		t.Fatalf("expected failure due to cached timestamp key")
 	}

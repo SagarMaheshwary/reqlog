@@ -27,7 +27,7 @@ func NewLineProcessor(cfg *Config, tp TimeParser) *LineProcessor {
 	}
 }
 
-func (lp *LineProcessor) ProcessLine(line, service string) (*domain.LogEntry, bool) {
+func (lp *LineProcessor) ProcessLine(line, service string, host string) (*domain.LogEntry, bool) {
 	// fast pre-filter (return if searchValue is not present in the line string)
 	if lp.config.IgnoreCase {
 		if !containsFoldASCII(line, lp.config.SearchValue) {
@@ -39,28 +39,28 @@ func (lp *LineProcessor) ProcessLine(line, service string) (*domain.LogEntry, bo
 		}
 	}
 
-	return lp.Parse(line, service, false)
+	return lp.Parse(line, service, host, false)
 }
 
-func (lp *LineProcessor) Parse(line, service string, skipMatch bool) (*domain.LogEntry, bool) {
+func (lp *LineProcessor) Parse(line, service string, host string, skipMatch bool) (*domain.LogEntry, bool) {
 	line = strings.TrimRight(line, "\r\n")
 
 	switch lp.config.Format {
 	case config.FormatJSON:
-		return lp.processJSONLine(line, service, skipMatch)
+		return lp.processJSONLine(line, service, host, skipMatch)
 	case config.FormatText:
-		return lp.processTextLine(line, service, skipMatch)
+		return lp.processTextLine(line, service, host, skipMatch)
 	case config.FormatAuto:
 		fallthrough
 	default:
 		if isJSONLine(line) {
-			return lp.processJSONLine(line, service, skipMatch)
+			return lp.processJSONLine(line, service, host, skipMatch)
 		}
-		return lp.processTextLine(line, service, skipMatch)
+		return lp.processTextLine(line, service, host, skipMatch)
 	}
 }
 
-func (lp *LineProcessor) processJSONLine(line string, service string, skipMatch bool) (*domain.LogEntry, bool) {
+func (lp *LineProcessor) processJSONLine(line string, service string, host string, skipMatch bool) (*domain.LogEntry, bool) {
 	if !gjson.Valid(line) {
 		return nil, false
 	}
@@ -88,12 +88,13 @@ func (lp *LineProcessor) processJSONLine(line string, service string, skipMatch 
 	return &domain.LogEntry{
 		Timestamp: ts,
 		Service:   service,
+		Host:      host,
 		Message:   parsedFields.Message,
 		Fields:    parsedFields.Fields,
 	}, true
 }
 
-func (lp *LineProcessor) processTextLine(line string, service string, skipMatch bool) (*domain.LogEntry, bool) {
+func (lp *LineProcessor) processTextLine(line string, service string, host string, skipMatch bool) (*domain.LogEntry, bool) {
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
 		return nil, false
@@ -116,6 +117,7 @@ func (lp *LineProcessor) processTextLine(line string, service string, skipMatch 
 	return &domain.LogEntry{
 		Timestamp: ts,
 		Service:   service,
+		Host:      host,
 		Message:   parsed.Message,
 		Fields:    parsed.Fields,
 		Raw:       line,

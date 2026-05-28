@@ -1,156 +1,178 @@
 package docker
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
+	"bytes"
+	"io"
 	"reflect"
 	"testing"
 )
 
-func fakeExecCommand(output string, err error) *exec.Cmd {
-	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
-	cmd.Env = []string{
-		"GO_WANT_HELPER_PROCESS=1",
-		"OUTPUT=" + output,
-		"ERR=" + fmt.Sprint(err != nil),
-	}
-	return cmd
+type mockExecutor struct {
+	lastCmd  string
+	lastArgs []string
+
+	runFunc    func(cmd string, args ...string) (io.ReadCloser, error)
+	outputFunc func(cmd string, args ...string) ([]byte, error)
 }
 
-func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
+func (m *mockExecutor) Run(cmd string, args ...string) (io.ReadCloser, error) {
+	m.lastCmd = cmd
+	m.lastArgs = args
+
+	if m.runFunc != nil {
+		return m.runFunc(cmd, args...)
+	}
+	return io.NopCloser(bytes.NewBufferString("mock")), nil
+}
+
+func (m *mockExecutor) RunCombined(cmd string, args ...string) (io.ReadCloser, error) {
+	return m.Run(cmd, args...)
+}
+
+func (m *mockExecutor) Output(cmd string, args ...string) ([]byte, error) {
+	m.lastCmd = cmd
+	m.lastArgs = args
+
+	if m.outputFunc != nil {
+		return m.outputFunc(cmd, args...)
+	}
+	return []byte("c1\nc2\n"), nil
+}
+
+func TestDockerCLIClient_Logs(t *testing.T) {
+	tests := []struct {
+		name      string
+		container string
+		follow    bool
+		since     string
+		wantArgs  []string
+	}{
+		{
+			name:      "basic logs",
+			container: "api",
+			follow:    false,
+			since:     "",
+			wantArgs:  []string{"logs", "api"},
+		},
+		{
+			name:      "with since",
+			container: "api",
+			follow:    false,
+			since:     "1h",
+			wantArgs:  []string{"logs", "--since", "1h", "api"},
+		},
+		{
+			name:      "follow enabled",
+			container: "api",
+			follow:    true,
+			since:     "",
+			wantArgs:  []string{"logs", "--follow", "--tail", "0", "api"},
+		},
+		{
+			name:      "follow + since",
+			container: "api",
+			follow:    true,
+			since:     "10m",
+			wantArgs:  []string{"logs", "--since", "10m", "--follow", "--tail", "0", "api"},
+		},
 	}
 
-	if os.Getenv("ERR") == "true" {
-		os.Exit(1)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := &mockExecutor{}
 
-	fmt.Fprint(os.Stdout, os.Getenv("OUTPUT"))
-	os.Exit(0)
+			client := NewDockerCLIClient(exec)
+
+			_, err := client.Logs(tt.container, tt.follow, tt.since)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if exec.lastCmd != "docker" {
+				t.Fatalf("expected docker, got %s", exec.lastCmd)
+			}
+
+			if !reflect.DeepEqual(exec.lastArgs, tt.wantArgs) {
+				t.Fatalf("args mismatch\nwant=%v\ngot=%v", tt.wantArgs, exec.lastArgs)
+			}
+		})
+	}
 }
 
 func TestDockerCLIClient_ListContainers(t *testing.T) {
-	tests := []struct {
-		name      string
-		output    string
-		err       error
-		want      []string
-		expectErr bool
-	}{
-		{
-			name:   "multiple containers",
-			output: "auth\nsvc\nworker\n",
-			want:   []string{"auth", "svc", "worker"},
-		},
-		{
-			name:   "empty lines trimmed",
-			output: "\nauth\n\nsvc\n",
-			want:   []string{"auth", "svc"},
-		},
-		{
-			name:      "command error",
-			err:       fmt.Errorf("docker not found"),
-			expectErr: true,
-		},
-	}
-
-	orig := execCommand
-	defer func() { execCommand = orig }()
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			execCommand = func(name string, args ...string) *exec.Cmd {
-				return fakeExecCommand(tt.output, tt.err)
-			}
-
-			c := NewDockerCLIClient()
-
-			res, err := c.ListContainers()
-
-			if tt.expectErr {
-				if err == nil {
-					t.Fatalf("expected error")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if !reflect.DeepEqual(res, tt.want) {
-				t.Fatalf("expected %v, got %v", tt.want, res)
-			}
-		})
-	}
-}
-
-func TestDockerCLIClient_Logs_Args(t *testing.T) {
-	tests := []struct {
-		name     string
-		follow   bool
-		since    string
-		expected []string
-	}{
-		{
-			name:   "basic logs",
-			follow: false,
-			since:  "",
-			expected: []string{
-				"logs", "auth",
+	t.Run("parses output", func(t *testing.T) {
+		exec := &mockExecutor{
+			outputFunc: func(cmd string, args ...string) ([]byte, error) {
+				return []byte("api\nworker\n\n"), nil
 			},
-		},
-		{
-			name:   "follow enabled",
-			follow: true,
-			since:  "",
-			expected: []string{
-				"logs", "--follow", "--tail", "0", "auth",
+		}
+
+		client := NewDockerCLIClient(exec)
+
+		got, err := client.ListContainers()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := []string{"api", "worker"}
+
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected %v got %v", want, got)
+		}
+	})
+
+	t.Run("trims spaces and ignores empty lines", func(t *testing.T) {
+		exec := &mockExecutor{
+			outputFunc: func(cmd string, args ...string) ([]byte, error) {
+				return []byte(" api \n  worker  \n\n"), nil
 			},
-		},
-		{
-			name:   "since provided",
-			follow: false,
-			since:  "5m",
-			expected: []string{
-				"logs", "--since", "5m", "auth",
+		}
+
+		client := NewDockerCLIClient(exec)
+
+		got, err := client.ListContainers()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := []string{"api", "worker"}
+
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected %v got %v", want, got)
+		}
+	})
+
+	t.Run("handles empty output", func(t *testing.T) {
+		exec := &mockExecutor{
+			outputFunc: func(cmd string, args ...string) ([]byte, error) {
+				return []byte(""), nil
 			},
-		},
-		{
-			name:   "follow + since",
-			follow: true,
-			since:  "5m",
-			expected: []string{
-				"logs", "--follow", "--tail", "0", "--since", "5m", "auth",
+		}
+
+		client := NewDockerCLIClient(exec)
+
+		got, err := client.ListContainers()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(got) != 0 {
+			t.Fatalf("expected empty slice got %v", got)
+		}
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		exec := &mockExecutor{
+			outputFunc: func(cmd string, args ...string) ([]byte, error) {
+				return nil, io.ErrUnexpectedEOF
 			},
-		},
-	}
+		}
 
-	orig := execCommand
-	defer func() { execCommand = orig }()
+		client := NewDockerCLIClient(exec)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var capturedArgs []string
-
-			execCommand = func(name string, args ...string) *exec.Cmd {
-				capturedArgs = args
-				return fakeExecCommand("log line\n", nil)
-			}
-
-			c := NewDockerCLIClient()
-
-			rc, err := c.Logs("auth", tt.follow, tt.since)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			defer rc.Close()
-
-			if !reflect.DeepEqual(capturedArgs, tt.expected) {
-				t.Fatalf("expected args %v, got %v", tt.expected, capturedArgs)
-			}
-		})
-	}
+		_, err := client.ListContainers()
+		if err == nil {
+			t.Fatalf("expected error but got nil")
+		}
+	})
 }

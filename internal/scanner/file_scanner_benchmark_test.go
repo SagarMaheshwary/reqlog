@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
+	"github.com/sagarmaheshwary/reqlog/internal/transport"
 )
 
 func createPlainLogFile(b *testing.B, dir, name string, lines int, matchEvery int) string {
@@ -86,12 +87,19 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 		}
 		lp := NewLineProcessor(cfg, NewTimeParser())
 
-		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr, time.Now())
-		files, err := fs.ListSources()
+		fs := NewFileScanner(&FileScannerOpts{
+			LineProcessor:  lp,
+			FollowInterval: time.Second,
+			Out:            os.Stdout,
+			ErrOut:         os.Stderr,
+			Now:            time.Now(),
+			FS:             transport.NewFileSystem(nil),
+		})
+		files, err := fs.ListSources(b.Context())
 		if err != nil {
 			b.Fatal(err)
 		}
-		entries, err := fs.Scan(files)
+		entries, err := fs.Scan(b.Context(), files)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -119,12 +127,19 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 		}
 		lp := NewLineProcessor(cfg, NewTimeParser())
 
-		fs := NewFileScanner(lp, time.Second, os.Stdout, os.Stderr, time.Now())
-		files, err := fs.ListSources()
+		fs := NewFileScanner(&FileScannerOpts{
+			LineProcessor:  lp,
+			FollowInterval: time.Second,
+			Out:            os.Stdout,
+			ErrOut:         os.Stderr,
+			Now:            time.Now(),
+			FS:             transport.NewFileSystem(nil),
+		})
+		files, err := fs.ListSources(b.Context())
 		if err != nil {
 			b.Fatal(err)
 		}
-		entries, err := fs.Scan(files)
+		entries, err := fs.Scan(b.Context(), files)
 		if err != nil {
 			b.Fatal(err)
 		}
