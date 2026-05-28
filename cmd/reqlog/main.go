@@ -42,7 +42,9 @@ func main() {
 
 	cfg.SearchValue = flag.Arg(0)
 
-	app.Run(ctx, cfg)
+	if err := app.Run(ctx, cfg); err != nil {
+		log.Fatal(err.Error())
+	}
 }
 
 func cliVersion() string {
