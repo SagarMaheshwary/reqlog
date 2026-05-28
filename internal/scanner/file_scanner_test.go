@@ -702,7 +702,7 @@ func TestFileScanner_Follow(t *testing.T) {
 				FS:             transport.NewFileSystem(nil),
 			})
 
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 			defer cancel()
 
 			// Optionally append new lines after start
@@ -754,7 +754,7 @@ func TestFileScanner_Follow_Errors(t *testing.T) {
 	// pass a missing file to trigger error
 	files := []string{"/tmp/nonexistent.log"}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	fs.Follow(ctx, files, &testFormatter{})

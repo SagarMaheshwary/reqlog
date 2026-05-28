@@ -12,6 +12,7 @@ import (
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/scanner"
 	"github.com/sagarmaheshwary/reqlog/internal/transport"
+	"golang.org/x/crypto/ssh"
 )
 
 func Run(ctx context.Context, cfg *config.Config) error {
@@ -138,7 +139,7 @@ func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor) ([]scanner
 			return nil, fmt.Errorf("invalid value passed to --host: %s", host)
 		}
 
-		sshClient, err := transport.NewSSHClient(h)
+		sshClient, err := transport.NewSSHClient(h, ssh.Dial)
 		if err != nil {
 			return nil, err
 		}

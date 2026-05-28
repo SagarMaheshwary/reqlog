@@ -110,10 +110,6 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 			}
 			defer reader.Close()
 
-			if ds.host != "" {
-				container = ds.host + ":" + container
-			}
-
 			r := bufio.NewReader(reader)
 			for {
 				line, err := r.ReadString('\n')

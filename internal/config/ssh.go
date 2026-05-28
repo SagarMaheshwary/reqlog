@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"go.yaml.in/yaml/v4"
 )
@@ -15,25 +16,40 @@ type SSH struct {
 }
 
 type Defaults struct {
-	Key string `yaml:"key"`
+	Key     string        `yaml:"key"`
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 type Host struct {
-	Host string `yaml:"host"`
-	User string `yaml:"user"`
-	Port int    `yaml:"port"`
-	Key  string `yaml:"key"`
+	Host    string        `yaml:"host"`
+	User    string        `yaml:"user"`
+	Port    int           `yaml:"port"`
+	Key     string        `yaml:"key"`
+	Timeout time.Duration `yaml:"timeout"`
 }
 
-const sshDefaultPort = 22
+const (
+	sshDefaultPort    = 22
+	sshDefaultTimeout = 30 * time.Second
+)
+
+func GetConfigPath(path string) (string, error) {
+	if path != "" {
+		return path, nil
+	}
+
+	userConfig, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("get user config dir: %w", err)
+	}
+
+	return filepath.Join(userConfig, "reqlog", "config.yaml"), nil
+}
 
 func NewSSH(path string) (*SSH, error) {
-	if path == "" {
-		userConfig, err := os.UserConfigDir()
-		if err != nil {
-			return nil, fmt.Errorf("get user config dir: %w", err)
-		}
-		path = filepath.Join(userConfig, "reqlog", "config.yaml")
+	path, err := GetConfigPath(path)
+	if err != nil {
+		return nil, err
 	}
 
 	data, err := os.ReadFile(path)
@@ -99,6 +115,13 @@ func (c *SSH) assignDefaults() {
 		}
 		if v.Key == "" {
 			v.Key = c.Defaults.Key
+		}
+		if v.Timeout == 0 {
+			if c.Defaults.Timeout != 0 {
+				v.Timeout = c.Defaults.Timeout
+			} else {
+				v.Timeout = sshDefaultTimeout
+			}
 		}
 		c.Hosts[k] = v
 	}
