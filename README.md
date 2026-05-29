@@ -1,8 +1,8 @@
 # reqlog
 
 <p align="center">
-  <b>Search and trace requests across files, Docker logs, and remote hosts.</b><br/>
-  Debug distributed systems from your terminal using simple key/value search without relying on centralized tracing.
+  <b>CLI for searching, tracing, and streaming logs across files, Docker containers, and remote hosts.</b><br/>
+  Trace requests across distributed systems using request_id, trace_id, correlation_id, and key/value log search — without centralized tracing.
 </p>
 
 <p align="center">
@@ -17,6 +17,91 @@
 </p>
 
 ![reqlog demo](./assets/demo.gif)
+
+## Table of Contents
+
+- [What is reqlog](#what-is-reqlog)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Companion UI](#companion-ui)
+- [Usage](#usage)
+- [Supported Log Formats](#supported-log-formats)
+- [What's Next](#whats-next)
+
+## What is reqlog?
+
+reqlog is a CLI tool for searching, tracing, and streaming logs across:
+
+- local log files
+- Docker containers
+- remote servers over SSH
+
+It helps engineers debug requests across microservices and distributed systems using:
+
+- `request_id`
+- `trace_id`
+- `correlation_id`
+- custom log keys
+
+Use reqlog when logs are spread across services or hosts, centralized tracing is unavailable, or you need fast terminal-based debugging.
+
+> grep for distributed systems logs
+
+Unlike `grep`, reqlog understands timestamps, JSON logs, Docker logs, multi-host SSH search, chronological request flow, and live log streaming.
+
+## Features
+
+- Search logs across multiple files
+- Trace requests using `request_id`, `trace_id`, and `correlation_id`
+- Stream live logs in real time (`-f`)
+- Search and stream Docker container logs
+- Search and stream logs on remote servers over SSH
+- JSON log parsing with automatic detection
+- Chronological request tracing across services
+- Context around matches (`--context`)
+- Structured JSON output for scripting
+- Time-based filtering (`--since`)
+
+## Quick Start
+
+Search logs using common request tracing keys like:
+
+`request_id`, `req_id`, `trace_id`, and `correlation_id`.
+
+Search log files:
+
+```bash
+reqlog abc123
+```
+
+Stream live logs in real time:
+
+```bash
+reqlog -f abc123
+```
+
+Search Docker containers:
+
+```bash
+reqlog -S docker abc123
+```
+
+Search remote hosts over SSH:
+
+```bash
+reqlog -H srv1,srv2 abc123
+```
+
+> Remote host search requires `config.yaml` configuration. See **Remote Logs over SSH** below.
+
+Example output:
+
+```text
+2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
+2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
+2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
+```
 
 ## Installation
 
@@ -59,39 +144,11 @@ Verify:
 reqlog -v
 ```
 
-## Quick Start
+## Companion UI
 
-Search logs using common request tracing keys like:
+Visual interface for exploring reqlog results in the browser:
 
-`request_id`, `req_id`, `trace_id`, and `correlation_id`.
-
-Search log files:
-
-```bash
-reqlog abc123
-```
-
-Search Docker containers:
-
-```bash
-reqlog -S docker abc123
-```
-
-Search remote hosts over SSH:
-
-```bash
-reqlog -H srv1,srv2 abc123
-```
-
-> Remote host search requires `config.yaml` configuration. See **Remote Logs over SSH** below.
-
-Example output:
-
-```text
-2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
-2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
-2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
-```
+https://github.com/sagarmaheshwary/reqlog-ui
 
 ## Usage
 
@@ -247,19 +304,6 @@ reqlog -f abc123
 
 > Full usage guide: [docs/usage.md](./docs/usage.md)
 
-## Why not just use `grep`?
-
-| Problem                         |      grep |      reqlog |
-| ------------------------------- | --------: | ----------: |
-| Multi-file search               | ⚠️ manual | ✅ built-in |
-| Multi-host / SSH log search     |        ❌ |          ✅ |
-| Request tracing across services |        ❌ |          ✅ |
-| JSON log search                 |        ❌ |          ✅ |
-| Chronological request flow      |        ❌ |          ✅ |
-| Service-aware context           |        ❌ |          ✅ |
-
-> `reqlog = grep for distributed systems`
-
 ## Supported Log Formats
 
 **Supported Timestamp Formats**
@@ -298,33 +342,26 @@ Timestamps are normalized to millisecond precision in output (fixed 3 digits).
 { "ts": 1710943200123, "request_id": "abc", "message": "unix milliseconds" }
 ```
 
-## Roadmap
+## What’s Next
 
-**Core Features**
+`reqlog` now supports the core workflows it was built for:
 
-- [x] Flexible timestamp parsing (RFC3339 / RFC3339Nano)
-- [x] Text log parsing (key=value)
-- [x] JSON log parsing
-- [x] Wildcard support in `--service` (e.g. order-service\*)
-- [x] Unix timestamp support (logs + `--since`)
-- [x] Optimize `--limit` (early exit / streaming)
-- [x] `--latest` flag (Return latest N entries globally)
-- [x] `--context` flag (show surrounding lines)
-- [x] `--output=json` for piping and integrations
-- [ ] `--fields` flag for JSON logs
+- Search local log files
+- Search Docker logs
+- Search remote logs over SSH
+- Trace requests across services using common keys like `request_id`, `trace_id`, and `correlation_id`
+- Output structured JSON for piping and automation
 
-**Performance & Scalability**
+Future updates will mainly focus on:
 
-- [ ] Parallel scanning
-- [ ] General performance improvements
+- Bug fixes and stability improvements
+- Output and usability improvements
+- Performance tuning over time
+- Additional features based on real-world usage and feedback
 
-**Integrations**
+### Planned
 
-- [x] File logs
-- [x] Docker logs
-- [x] SSH-based multi-host logs
-
-> Companion web UI for reqlog: https://github.com/sagarmaheshwary/reqlog-ui
+- [ ] `--fields` flag for selecting specific fields from JSON logs ([#14](https://github.com/SagarMaheshwary/reqlog/issues/14))
 
 ## Support & Contributions
 
