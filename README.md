@@ -105,40 +105,51 @@ Example output:
 
 ## Installation
 
-**Go Install**
+reqlog is a single binary with no runtime dependencies.
+
+### Go Install
 
 ```bash
 go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
 ```
 
-**macOS / Linux**
+### macOS / Linux (Quick Install)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
 ```
 
-- Auto-detects OS/arch
-- Installs latest version
-- Installs to `/usr/local/bin`
+This script:
 
-Verify:
+- Detects OS and architecture automatically
+- Downloads the latest release
+- Installs `reqlog` to `/usr/local/bin`
+
+### Manual Installation (Linux / macOS)
+
+You can also install manually from the latest release:
+
+1. Download the appropriate binary from:
+   [https://github.com/sagarmaheshwary/reqlog/releases](https://github.com/sagarmaheshwary/reqlog/releases)
+2. Extract and install:
 
 ```bash
-reqlog -v
+tar -xzf reqlog-linux-amd64.tar.gz
+sudo mv reqlog /usr/local/bin/
 ```
 
-**Windows**
+### Windows
 
-Download from:
+Download the latest release from:
 
 [https://github.com/sagarmaheshwary/reqlog/releases](https://github.com/sagarmaheshwary/reqlog/releases)
 
 Then:
 
-- unzip
-- add to `PATH`
+- Extract the archive
+- Add the binary to your `PATH`
 
-Verify:
+### Verify installation
 
 ```bash
 reqlog -v
