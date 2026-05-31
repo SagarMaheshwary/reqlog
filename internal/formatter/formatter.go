@@ -140,7 +140,7 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
-	fields := f.renderPrettyFields(entry.Fields)
+	level, fields := f.renderPrettyFields(entry.Fields)
 
 	if entry.Message == "" {
 		return fields
@@ -150,11 +150,12 @@ func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
 		return entry.Message
 	}
 
-	return entry.Message + " " + fields
+	return level + " " + f.colorizer.Bold(entry.Message) + reset + " " + fields
 }
 
-func (f *Formatter) renderPrettyFields(fields map[string]any) string {
+func (f *Formatter) renderPrettyFields(fields map[string]any) (string, string) {
 	var kvParts []string
+	var level string
 
 	for _, pair := range sortKVByPriority(fields) {
 		key := pair.key
@@ -163,7 +164,8 @@ func (f *Formatter) renderPrettyFields(fields map[string]any) string {
 		renderedVal := stringifyValue(val)
 
 		if key == "level" {
-			renderedVal = f.colorLevel(val)
+			level = f.colorLevel(val)
+			continue
 		}
 
 		key = f.highlightKey(key)
@@ -178,16 +180,20 @@ func (f *Formatter) renderPrettyFields(fields map[string]any) string {
 		)
 	}
 
-	return strings.Join(kvParts, " ")
+	return level, strings.Join(kvParts, " ")
 }
 
 func (f *Formatter) colorLevel(v any) string {
-	val := stringifyValue(v)
-	switch strings.ToLower(val) {
-	case "error":
+	val := strings.ToUpper(stringifyValue(v))
+	switch val {
+	case "INFO":
+		return f.colorizer.Green(val)
+	case "ERROR", "ERR":
 		return f.colorizer.Red(val)
-	case "warn", "warning":
+	case "WARN", "WARNING":
 		return f.colorizer.Yellow(val)
+	case "DEBUG":
+		return f.colorizer.Blue(val)
 	default:
 		return val
 	}

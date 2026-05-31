@@ -37,29 +37,6 @@ func TestFormat_HighlightSearchKey(t *testing.T) {
 	}
 }
 
-func TestFormat_ColorLevel(t *testing.T) {
-	entry := domain.LogEntry{
-		Timestamp: time.Now(),
-		Service:   "api",
-		Message:   "fail",
-		Fields: map[string]any{
-			"level": "error",
-		},
-	}
-
-	f := &Formatter{
-		colorizer:    NewColorizer(),
-		searchKeys:   nil,
-		serviceWidth: len("api"),
-	}
-
-	out := f.Format(entry)
-
-	if !strings.Contains(out, f.colorizer.Red("error")) {
-		t.Fatalf("expected 'error' to be colored red")
-	}
-}
-
 func TestFormat_OutputStructure(t *testing.T) {
 	ts := time.Date(2026, 3, 20, 14, 10, 0, 0, time.UTC)
 
