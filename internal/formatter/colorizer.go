@@ -43,6 +43,7 @@ const (
 	red    = "\033[31m"
 	green  = "\033[32m"
 	yellow = "\033[33m"
+	blue   = "\033[34m"
 	cyan   = "\033[36m"
 )
 
@@ -79,6 +80,10 @@ func (c *Colorizer) Red(s string) string {
 
 func (c *Colorizer) Yellow(s string) string {
 	return yellow + s + reset
+}
+
+func (c *Colorizer) Blue(s string) string {
+	return blue + s + reset
 }
 
 func (c *Colorizer) Bold(s string) string {
