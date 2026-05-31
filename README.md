@@ -98,9 +98,9 @@ reqlog -H srv1,srv2 abc123
 Example output:
 
 ```text
-2026-03-20T14:10:01.000Z [api-gateway]       | calling order service level=info request_id=abc123
-2026-03-20T14:10:02.000Z [order-service]     | fetching order level=info request_id=abc123
-2026-03-20T14:10:03.000Z [inventory-service] | checking stock level=info request_id=abc123
+2026-03-20T14:10:01.000Z [api-gateway]       | INFO calling order service request_id=abc123
+2026-03-20T14:10:02.000Z [order-service]     | INFO fetching order request_id=abc123
+2026-03-20T14:10:03.000Z [inventory-service] | INFO checking stock request_id=abc123
 ```
 
 ## Installation
