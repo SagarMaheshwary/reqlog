@@ -224,7 +224,7 @@ Place `config.yaml` in one of the following locations:
 version: 1
 
 defaults:
-  key: ~/.ssh/id_rsa
+  key: /home/ubuntu/.ssh/id_rsa
   timeout: 30s
 
 hosts:
@@ -236,9 +236,11 @@ hosts:
     host: 10.0.0.11
     user: ec2-user
     port: 2222
-    key: ~/.ssh/prod.pem
+    key: /home/ubuntu/.ssh/prod.pem
     timeout: 60s
 ```
+
+> `~` is not currently expanded in `config.yaml`. Use an absolute path for `key` (for example `/home/user/.ssh/id_rsa`). `~` support may be added in a future release.
 
 Search logs on a single remote host:
 
@@ -261,6 +263,7 @@ reqlog -H srv1,srv2 -S docker abc123
 > Host names passed to `-H` must match entries under `hosts` in `config.yaml`.
 >
 > SSH logs include host context in outputs:
+>
 > - Pretty output: `[host:service]`
 > - JSON output includes a `host` field
 
