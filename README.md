@@ -193,10 +193,17 @@ reqlog -S docker -s api-gateway abc123
 
 Search logs across remote hosts using SSH by defining hosts in `config.yaml`.
 
-Place `config.yaml` in one of the following locations:
+By default, reqlog looks for `config.yaml` in:
 
-- macOS/Linux: `~/.config/reqlog/config.yaml`
+- Linux: `~/.config/reqlog/config.yaml`
+- macOS: `~/Library/Application Support/reqlog/config.yaml`
 - Windows: `%APPDATA%\reqlog\config.yaml`
+
+You can also specify a custom configuration file:
+
+```bash
+reqlog --config ./config.yaml -H srv1 abc123
+```
 
 Example `config.yaml`:
 
@@ -220,7 +227,7 @@ hosts:
     timeout: 60s
 ```
 
-> `~` is not currently expanded in `config.yaml`. Use an absolute path for `key` (for example `/home/user/.ssh/id_rsa`). `~` support may be added in a future release.
+> `~` is not currently expanded in `config.yaml`. Use an absolute path for `key` (for example `/home/user/.ssh/id_rsa`).
 
 Search logs on a single remote host:
 
