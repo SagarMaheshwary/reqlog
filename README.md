@@ -193,6 +193,8 @@ reqlog -S docker -s api-gateway abc123
 
 Search logs across remote hosts using SSH by defining hosts in `config.yaml`.
 
+> **Note:** SSH file search currently requires SFTP to be enabled on the remote host. Some hardened production servers disable SFTP. SSH command fallback is planned for a future release.
+
 By default, reqlog looks for `config.yaml` in:
 
 - Linux: `~/.config/reqlog/config.yaml`
