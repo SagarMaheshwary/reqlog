@@ -134,6 +134,25 @@ func (fs *FileScanner) scanFromOffset(ctx context.Context, path string, f format
 	service := strings.TrimSuffix(filepath.Base(path), ".log")
 	offset := fs.offsets[path]
 
+	size, err := fs.logFileReader.Size(
+		ctx,
+		path,
+	)
+	if err != nil {
+		logScanError(fs.errOut, path, err)
+		return
+	}
+
+	// log rotation / truncation
+	if size < offset {
+		offset = 0
+	}
+
+	// no new content
+	if size == offset {
+		return
+	}
+
 	file, err := fs.logFileReader.OpenFromOffset(ctx, path, offset)
 	if err != nil {
 		logScanError(fs.errOut, path, err)

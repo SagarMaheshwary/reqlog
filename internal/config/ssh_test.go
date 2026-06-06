@@ -285,3 +285,47 @@ hosts:
 		})
 	}
 }
+
+func TestExpandHomeDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("unable to determine home directory")
+	}
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "expands home directory",
+			in:   "~/config.yaml",
+			want: filepath.Join(home, "config.yaml"),
+		},
+		{
+			name: "does not modify absolute path",
+			in:   "/tmp/config.yaml",
+			want: "/tmp/config.yaml",
+		},
+		{
+			name: "does not modify relative path",
+			in:   "config.yaml",
+			want: "config.yaml",
+		},
+		{
+			name: "does not modify tilde without slash",
+			in:   "~",
+			want: "~",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := expandHomeDir(tt.in)
+
+			if got != tt.want {
+				t.Fatalf("expected %q got %q", tt.want, got)
+			}
+		})
+	}
+}

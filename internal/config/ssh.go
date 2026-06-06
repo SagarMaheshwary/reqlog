@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v4"
@@ -113,9 +114,12 @@ func (c *SSH) assignDefaults() {
 		if v.Port == 0 {
 			v.Port = sshDefaultPort
 		}
+
 		if v.Key == "" {
 			v.Key = c.Defaults.Key
 		}
+		v.Key = expandHomeDir(v.Key)
+
 		if v.Timeout == 0 {
 			if c.Defaults.Timeout != 0 {
 				v.Timeout = c.Defaults.Timeout
@@ -125,4 +129,15 @@ func (c *SSH) assignDefaults() {
 		}
 		c.Hosts[k] = v
 	}
+}
+
+func expandHomeDir(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+
+	return path
 }
