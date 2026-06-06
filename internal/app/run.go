@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pkg/sftp"
 	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
@@ -144,13 +143,6 @@ func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor) ([]scanner
 			return nil, err
 		}
 
-		var sftpClient *sftp.Client
-		if cfg.Source == config.SourceFile {
-			sftpClient, err = sftp.NewClient(sshClient)
-			if err != nil {
-				return nil, err
-			}
-		}
 		executor := transport.NewExecutor(sshClient)
 		scn, err := scanner.New(&scanner.FactoryOpts{
 			Source:        cfg.Source,
@@ -164,10 +156,9 @@ func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor) ([]scanner
 		}
 
 		scanners = append(scanners, scannerSource{
-			scanner:    scn,
-			sshClient:  sshClient,
-			sftpClient: sftpClient,
-			sources:    make([]string, 0),
+			scanner:   scn,
+			sshClient: sshClient,
+			sources:   make([]string, 0),
 		})
 	}
 
