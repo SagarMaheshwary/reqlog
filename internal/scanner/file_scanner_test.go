@@ -26,7 +26,7 @@ func newTestFileScanner(cfg *Config) *FileScanner {
 		Out:            io.Discard,
 		ErrOut:         io.Discard,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 }
 
@@ -59,7 +59,7 @@ func TestFileScanner_Scan(t *testing.T) {
 		Out:            io.Discard,
 		ErrOut:         io.Discard,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 
 	files, err := fs.ListSources(t.Context())
@@ -108,7 +108,7 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 		Out:            io.Discard,
 		ErrOut:         io.Discard,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 	files, err := fs.ListSources(t.Context())
 	if err != nil {
@@ -144,7 +144,7 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 		Out:            io.Discard,
 		ErrOut:         io.Discard,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 	files, err := fs.ListSources(t.Context())
 	if err != nil {
@@ -179,7 +179,7 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 		Out:            io.Discard,
 		ErrOut:         io.Discard,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 	files, err := fs.ListSources(t.Context())
 	if err != nil {
@@ -352,7 +352,7 @@ func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
 		Out:            &out,
 		ErrOut:         &errOut,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 	results, err := fs.Scan(t.Context(), files)
 	if err != nil {
@@ -436,7 +436,7 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 				Out:            io.Discard,
 				ErrOut:         io.Discard,
 				Now:            time.Now(),
-				FS:             transport.NewFileSystem(nil),
+				LogFileReader:  transport.NewLogFileReader(nil),
 			})
 			files, err := fs.ListSources(t.Context())
 			if err != nil {
@@ -699,7 +699,7 @@ func TestFileScanner_Follow(t *testing.T) {
 				Out:            &out,
 				ErrOut:         io.Discard,
 				Now:            time.Now(),
-				FS:             transport.NewFileSystem(nil),
+				LogFileReader:  transport.NewLogFileReader(nil),
 			})
 
 			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
@@ -748,7 +748,7 @@ func TestFileScanner_Follow_Errors(t *testing.T) {
 		Out:            &out,
 		ErrOut:         &errOut,
 		Now:            time.Now(),
-		FS:             transport.NewFileSystem(nil),
+		LogFileReader:  transport.NewLogFileReader(nil),
 	})
 
 	// pass a missing file to trigger error

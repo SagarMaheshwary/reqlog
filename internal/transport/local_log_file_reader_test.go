@@ -1,62 +1,14 @@
 package transport
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 )
 
-func TestIsLogFile(t *testing.T) {
-	tests := []struct {
-		name string
-		file string
-		want bool
-	}{
-		{"log file", "app.log", true},
-		{"text file", "app.txt", false},
-		{"no extension", "app", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isLogFile(tt.file)
-
-			if got != tt.want {
-				t.Fatalf("expected %v got %v", tt.want, got)
-			}
-		})
-	}
-}
-
-func TestBuildServiceMatcher(t *testing.T) {
-	tests := []struct {
-		name     string
-		services []string
-		file     string
-		want     bool
-	}{
-		{"no filters matches all", nil, "api.log", true},
-		{"exact match + empty service", []string{"api", ""}, "api.log", true},
-		{"exact no match", []string{"db"}, "api.log", false},
-		{"prefix wildcard", []string{"api-*"}, "api-prod.log", true},
-		{"prefix wildcard no match", []string{"api-*"}, "worker.log", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			match := buildServiceMatcher(tt.services)
-
-			got := match(tt.file)
-
-			if got != tt.want {
-				t.Fatalf("expected %v got %v", tt.want, got)
-			}
-		})
-	}
-}
-
-func TestLocalFileSystem_Open(t *testing.T) {
+func TestLocalLogFileReader_Open(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.log")
 
@@ -64,7 +16,7 @@ func TestLocalFileSystem_Open(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fs := &LocalFileSystem{}
+	fs := &LocalLogFileReader{}
 
 	f, err := fs.Open(t.Context(), path)
 	if err != nil {
@@ -73,7 +25,84 @@ func TestLocalFileSystem_Open(t *testing.T) {
 	defer f.Close()
 }
 
-func TestLocalFileSystem_ListFiles_Flat(t *testing.T) {
+func TestLocalLogFileReader_OpenFromOffset(t *testing.T) {
+	dir := t.TempDir()
+
+	path := filepath.Join(dir, "test.log")
+
+	if err := os.WriteFile(path, []byte("hello world"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &LocalLogFileReader{}
+
+	rc, err := r.OpenFromOffset(t.Context(), path, 6)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+
+	if string(data) != "world" {
+		t.Fatalf("expected %q got %q", "world", string(data))
+	}
+}
+
+func TestLocalLogFileReader_OpenFromOffset_FileNotFound(t *testing.T) {
+	r := &LocalLogFileReader{}
+
+	_, err := r.OpenFromOffset(
+		t.Context(),
+		filepath.Join(t.TempDir(), "missing.log"),
+		0,
+	)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLocalLogFileReader_Size(t *testing.T) {
+	dir := t.TempDir()
+
+	path := filepath.Join(dir, "test.log")
+
+	content := []byte("hello world")
+
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &LocalLogFileReader{}
+
+	size, err := r.Size(t.Context(), path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if size != int64(len(content)) {
+		t.Fatalf("expected size %d got %d", len(content), size)
+	}
+}
+
+func TestLocalLogFileReader_Size_FileNotFound(t *testing.T) {
+	r := &LocalLogFileReader{}
+
+	_, err := r.Size(
+		t.Context(),
+		filepath.Join(t.TempDir(), "missing.log"),
+	)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLocalLogFileReader_ListFiles_Flat(t *testing.T) {
 	dir := t.TempDir()
 
 	files := []string{
@@ -104,7 +133,7 @@ func TestLocalFileSystem_ListFiles_Flat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fs := &LocalFileSystem{}
+	fs := &LocalLogFileReader{}
 
 	got, err := fs.ListFiles(t.Context(), dir, ListOptions{
 		Services: []string{"api"},
@@ -122,7 +151,7 @@ func TestLocalFileSystem_ListFiles_Flat(t *testing.T) {
 	}
 }
 
-func TestLocalFileSystem_ListFiles_Recursive(t *testing.T) {
+func TestLocalLogFileReader_ListFiles_Recursive(t *testing.T) {
 	dir := t.TempDir()
 
 	nested := filepath.Join(dir, "services")
@@ -142,7 +171,7 @@ func TestLocalFileSystem_ListFiles_Recursive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fs := &LocalFileSystem{}
+	fs := &LocalLogFileReader{}
 
 	got, err := fs.ListFiles(t.Context(), dir, ListOptions{
 		Recursive: true,
@@ -161,7 +190,7 @@ func TestLocalFileSystem_ListFiles_Recursive(t *testing.T) {
 	}
 }
 
-func TestLocalFileSystem_ListFiles_Recursive_OnError(t *testing.T) {
+func TestLocalLogFileReader_ListFiles_Recursive_OnError(t *testing.T) {
 	dir := t.TempDir()
 
 	protectedDir := filepath.Join(dir, "restricted")
@@ -178,7 +207,7 @@ func TestLocalFileSystem_ListFiles_Recursive_OnError(t *testing.T) {
 		gotErr  error
 	)
 
-	fs := &LocalFileSystem{}
+	fs := &LocalLogFileReader{}
 
 	files, err := fs.ListFiles(t.Context(), dir, ListOptions{
 		Recursive: true,
@@ -207,46 +236,5 @@ func TestLocalFileSystem_ListFiles_Recursive_OnError(t *testing.T) {
 
 	if gotErr == nil {
 		t.Fatal("expected error passed to OnError")
-	}
-}
-
-func TestBuildServiceMatcher_MixedExactAndWildcard(t *testing.T) {
-	match := buildServiceMatcher([]string{"api-*", "worker"})
-
-	tests := []struct {
-		name string
-		file string
-		want bool
-	}{
-		{
-			name: "matches wildcard prefix",
-			file: "api-prod.log",
-			want: true,
-		},
-		{
-			name: "matches exact service",
-			file: "worker.log",
-			want: true,
-		},
-		{
-			name: "does not match non matching service",
-			file: "db.log",
-			want: false,
-		},
-		{
-			name: "does not match partial exact service",
-			file: "worker-prod.log",
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := match(tt.file)
-
-			if got != tt.want {
-				t.Fatalf("match(%q): expected %v got %v", tt.file, tt.want, got)
-			}
-		})
 	}
 }

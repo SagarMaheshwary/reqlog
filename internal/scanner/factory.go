@@ -13,8 +13,8 @@ import (
 type FactoryOpts struct {
 	Source        config.Source
 	LineProcessor *LineProcessor
-	FS            transport.FileSystem
 	Executor      transport.Executor
+	LogFileReader transport.LogFileReader
 	Host          string
 }
 
@@ -27,7 +27,7 @@ func New(opts *FactoryOpts) (Scanner, error) {
 			Out:            os.Stdout,
 			ErrOut:         os.Stderr,
 			Now:            time.Now(),
-			FS:             opts.FS,
+			LogFileReader:  opts.LogFileReader,
 			Host:           opts.Host,
 		}), nil
 	case config.SourceDocker:

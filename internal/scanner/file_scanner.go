@@ -21,7 +21,7 @@ type FileScanner struct {
 	out            io.Writer
 	errOut         io.Writer
 	now            time.Time
-	fsys           transport.FileSystem
+	logFileReader  transport.LogFileReader
 	host           string
 }
 
@@ -31,7 +31,7 @@ type FileScannerOpts struct {
 	Out            io.Writer
 	ErrOut         io.Writer
 	Now            time.Time
-	FS             transport.FileSystem
+	LogFileReader  transport.LogFileReader
 	Host           string
 }
 
@@ -43,7 +43,7 @@ func NewFileScanner(opts *FileScannerOpts) *FileScanner {
 		out:            opts.Out,
 		errOut:         opts.ErrOut,
 		now:            opts.Now,
-		fsys:           opts.FS,
+		logFileReader:  opts.LogFileReader,
 		host:           opts.Host,
 	}
 }
@@ -57,7 +57,7 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 	}
 
 	for _, path := range files {
-		file, err := fs.fsys.Open(ctx, path)
+		file, err := fs.logFileReader.Open(ctx, path)
 		if err != nil {
 			logScanError(fs.errOut, path, err)
 			continue
@@ -69,16 +69,12 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 
 			service := strings.TrimSuffix(filepath.Base(path), ".log")
 			reader := bufio.NewReader(file)
-			var offset int64 = 0
-
 			engine := NewContextEngine(fs.lineProcessor, collector, cfg.Context)
 
 			for {
 				line, err := reader.ReadString('\n')
 
 				if len(line) > 0 {
-					offset += int64(len(line))
-
 					entry, ok := fs.lineProcessor.ProcessLine(line, service, fs.host)
 					continueReading := engine.Handle(ContextLine{
 						Line:    line,
@@ -100,11 +96,11 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 				}
 			}
 
-			stat, err := file.Stat()
-			if err == nil {
-				offset = stat.Size()
+			size, err := fs.logFileReader.Size(ctx, path)
+			if err != nil {
+				return 0, err
 			}
-			return offset, nil
+			return size, nil
 		}()
 
 		if err != nil {
@@ -128,28 +124,22 @@ func (fs *FileScanner) Follow(ctx context.Context, files []string, f formatter.L
 
 		case <-ticker.C:
 			for _, path := range files {
-				fs.processFile(ctx, path, f)
+				fs.scanFromOffset(ctx, path, f)
 			}
 		}
 	}
 }
 
-func (fs *FileScanner) processFile(ctx context.Context, path string, f formatter.LogFormatter) {
-	file, err := fs.fsys.Open(ctx, path)
+func (fs *FileScanner) scanFromOffset(ctx context.Context, path string, f formatter.LogFormatter) {
+	service := strings.TrimSuffix(filepath.Base(path), ".log")
+	offset := fs.offsets[path]
+
+	file, err := fs.logFileReader.OpenFromOffset(ctx, path, offset)
 	if err != nil {
 		logScanError(fs.errOut, path, err)
 		return
 	}
 	defer file.Close()
-
-	service := strings.TrimSuffix(filepath.Base(path), ".log")
-	offset := fs.offsets[path]
-
-	_, err = file.Seek(offset, io.SeekStart)
-	if err != nil {
-		logScanError(fs.errOut, path, err)
-		return
-	}
 
 	reader := bufio.NewReader(file)
 
@@ -180,7 +170,7 @@ func (fs *FileScanner) processFile(ctx context.Context, path string, f formatter
 func (fs *FileScanner) ListSources(ctx context.Context) ([]string, error) {
 	cfg := fs.lineProcessor.config
 
-	files, err := fs.fsys.ListFiles(ctx, cfg.Dir, transport.ListOptions{
+	files, err := fs.logFileReader.ListFiles(ctx, cfg.Dir, transport.ListOptions{
 		Recursive: cfg.Recursive,
 		Services:  cfg.Services,
 		OnError: func(path string, err error) {

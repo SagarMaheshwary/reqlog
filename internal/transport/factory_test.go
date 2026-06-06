@@ -3,26 +3,24 @@ package transport
 import (
 	"testing"
 
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
-func TestNewFileSystem(t *testing.T) {
-	t.Run("returns local filesystem when client is nil", func(t *testing.T) {
-		fs := NewFileSystem(nil)
+func TestNewLogFileReader(t *testing.T) {
+	t.Run("returns local LogFileReader when client is nil", func(t *testing.T) {
+		r := NewLogFileReader(nil)
 
-		if _, ok := fs.(*LocalFileSystem); !ok {
-			t.Fatalf("expected *LocalFileSystem got %T", fs)
+		if _, ok := r.(*LocalLogFileReader); !ok {
+			t.Fatalf("expected *LocalLogFileReader got %T", r)
 		}
 	})
 
-	t.Run("returns ssh filesystem when client provided", func(t *testing.T) {
-		client := &sftp.Client{}
+	t.Run("returns ssh LogFileReader when client provided", func(t *testing.T) {
+		executor := &SSHExecutor{client: &ssh.Client{}}
+		r := NewLogFileReader(executor)
 
-		fs := NewFileSystem(client)
-
-		if _, ok := fs.(*SSHFileSystem); !ok {
-			t.Fatalf("expected *SSHFileSystem got %T", fs)
+		if _, ok := r.(*SSHLogFileReader); !ok {
+			t.Fatalf("expected *SSHLogFileReader got %T", r)
 		}
 	})
 }
