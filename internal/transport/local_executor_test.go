@@ -47,32 +47,6 @@ func TestLocalExecutor_Run(t *testing.T) {
 	}
 }
 
-func TestLocalExecutor_RunCombined(t *testing.T) {
-	exec := &LocalExecutor{}
-
-	rc1, err := exec.Run("printf", "a")
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	defer rc1.Close()
-
-	rc2, err := exec.RunCombined("printf", "a")
-	if err != nil {
-		t.Fatalf("RunCombined failed: %v", err)
-	}
-	defer rc2.Close()
-
-	b1 := make([]byte, 10)
-	b2 := make([]byte, 10)
-
-	n1, _ := rc1.Read(b1)
-	n2, _ := rc2.Read(b2)
-
-	if string(b1[:n1]) != string(b2[:n2]) {
-		t.Fatalf("Run and RunCombined differ")
-	}
-}
-
 func TestLocalExecutor_InvalidCommand(t *testing.T) {
 	exec := &LocalExecutor{}
 

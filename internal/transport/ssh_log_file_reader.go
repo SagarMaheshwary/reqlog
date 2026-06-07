@@ -4,29 +4,30 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 type SSHLogFileReader struct {
-	excutor Executor
+	executor Executor
 }
 
 func (r *SSHLogFileReader) Open(ctx context.Context, path string) (io.ReadCloser, error) {
 	// "cat" streams the file content, so it can be used to read line
 	// by line without loading the entire file into memory.
-	return r.excutor.Run("cat", quoteShellArg(path))
+	return r.executor.Run("cat", quoteShellArg(path))
 }
 
 func (r *SSHLogFileReader) OpenFromOffset(ctx context.Context, path string, offset int64) (io.ReadCloser, error) {
 	start := offset + 1
 
 	// "tail" -c +<offset> reads the file content starting from the specified byte offset.
-	return r.excutor.Run("tail", "-c", fmt.Sprintf("+%d", start), quoteShellArg(path))
+	return r.executor.Run("tail", "-c", fmt.Sprintf("+%d", start), quoteShellArg(path))
 }
 
 func (r *SSHLogFileReader) Size(ctx context.Context, path string) (int64, error) {
-	out, err := r.excutor.Output("wc", "-c", "<", quoteShellArg(path))
+	out, err := r.executor.Output("wc", "-c", "<", quoteShellArg(path))
 	if err != nil {
 		return 0, err
 	}
@@ -53,7 +54,7 @@ func (r *SSHLogFileReader) listRecursive(
 	dir string,
 	matchesService func(string) bool,
 ) ([]string, error) {
-	out, err := r.excutor.Output("find", dir, "-type", "f")
+	out, err := r.executor.Output("find", dir, "-type", "f")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %v", err)
 	}
@@ -68,7 +69,7 @@ func (r *SSHLogFileReader) listRecursive(
 		}
 
 		if l != "" {
-			if matchesService(l) {
+			if matchesService(filepath.Base(l)) {
 				files = append(files, l)
 			}
 		}
@@ -81,7 +82,7 @@ func (r *SSHLogFileReader) listFlat(
 	dir string,
 	matchesService func(string) bool,
 ) ([]string, error) {
-	out, err := r.excutor.Output("find", dir, "-maxdepth", "1", "-type", "f")
+	out, err := r.executor.Output("find", dir, "-maxdepth", "1", "-type", "f")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %v", err)
 	}
@@ -96,7 +97,7 @@ func (r *SSHLogFileReader) listFlat(
 		}
 
 		if l != "" {
-			if matchesService(l) {
+			if matchesService(filepath.Base(l)) {
 				files = append(files, l)
 			}
 		}

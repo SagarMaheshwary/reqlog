@@ -14,7 +14,7 @@ func NewExecutor(client *ssh.Client) Executor {
 
 func NewLogFileReader(executor Executor) LogFileReader {
 	if executor != nil {
-		return &SSHLogFileReader{excutor: executor}
+		return &SSHLogFileReader{executor: executor}
 	}
 
 	return &LocalLogFileReader{}

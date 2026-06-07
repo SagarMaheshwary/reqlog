@@ -1,6 +1,8 @@
 package transport
 
-import "strings"
+import (
+	"strings"
+)
 
 func buildServiceMatcher(services []string) func(string) bool {
 	exact := map[string]struct{}{}
