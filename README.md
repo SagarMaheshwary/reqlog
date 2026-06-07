@@ -24,6 +24,7 @@
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+- [Requirements](#requirements)
 - [Companion UI](#companion-ui)
 - [Usage](#usage)
 - [Supported Log Formats](#supported-log-formats)
@@ -155,6 +156,31 @@ Then:
 reqlog -v
 ```
 
+## Requirements
+
+reqlog relies on a few system tools depending on the log source.
+
+**Local files**
+
+No dependencies.
+
+**Docker logs**
+
+Requires `docker` CLI (local and remote hosts).
+
+**SSH file logs (Linux servers)**
+
+Requires standard Unix utilities:
+
+```bash
+find, cat, tail, wc
+```
+
+**Notes**
+
+- SSH log access is designed for Linux-based environments (VMs, EC2, containers, Kubernetes nodes, bare-metal servers).
+- Windows SSH environments are not guaranteed.
+
 ## Companion UI
 
 Visual interface for exploring reqlog results in the browser:
@@ -193,8 +219,6 @@ reqlog -S docker -s api-gateway abc123
 
 Search logs across remote hosts using SSH by defining hosts in `config.yaml`.
 
-> **Note:** SSH file search currently requires SFTP to be enabled on the remote host. Some hardened production servers disable SFTP. SSH command fallback is planned for a future release.
-
 By default, reqlog looks for `config.yaml` in:
 
 - Linux: `~/.config/reqlog/config.yaml`
@@ -213,7 +237,7 @@ Example `config.yaml`:
 version: 1
 
 defaults:
-  key: /home/ubuntu/.ssh/id_rsa
+  key: ~/.ssh/id_rsa
   timeout: 30s
 
 hosts:
@@ -228,8 +252,6 @@ hosts:
     key: /home/ubuntu/.ssh/prod.pem
     timeout: 60s
 ```
-
-> `~` is not currently expanded in `config.yaml`. Use an absolute path for `key` (for example `/home/user/.ssh/id_rsa`).
 
 Search logs on a single remote host:
 
