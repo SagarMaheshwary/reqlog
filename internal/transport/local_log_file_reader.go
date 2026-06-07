@@ -2,28 +2,51 @@ package transport
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
-type LocalFileSystem struct{}
+type LocalLogFileReader struct{}
 
-func (fs *LocalFileSystem) Open(ctx context.Context, path string) (File, error) {
+func (r *LocalLogFileReader) Open(ctx context.Context, path string) (io.ReadCloser, error) {
 	return os.Open(path)
 }
 
-func (fs *LocalFileSystem) ListFiles(ctx context.Context, dir string, opts ListOptions) ([]string, error) {
+func (r *LocalLogFileReader) OpenFromOffset(ctx context.Context, path string, offset int64) (io.ReadCloser, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = file.Seek(offset, io.SeekStart)
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+
+	return file, nil
+}
+
+func (r *LocalLogFileReader) Size(ctx context.Context, path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
+func (r *LocalLogFileReader) ListFiles(ctx context.Context, dir string, opts ListOptions) ([]string, error) {
 	matcher := buildServiceMatcher(opts.Services)
 
 	if opts.Recursive {
-		return fs.listRecursive(dir, matcher, opts)
+		return r.listRecursive(dir, matcher, opts)
 	}
 
-	return fs.listFlat(dir, matcher)
+	return r.listFlat(dir, matcher)
 }
 
-func (fs *LocalFileSystem) listRecursive(
+func (r *LocalLogFileReader) listRecursive(
 	dir string,
 	matchesService func(string) bool,
 	opts ListOptions,
@@ -63,7 +86,7 @@ func (fs *LocalFileSystem) listRecursive(
 	return files, err
 }
 
-func (fs *LocalFileSystem) listFlat(
+func (r *LocalLogFileReader) listFlat(
 	dir string,
 	matchesService func(string) bool,
 ) ([]string, error) {
@@ -93,47 +116,4 @@ func (fs *LocalFileSystem) listFlat(
 	}
 
 	return files, nil
-}
-
-func buildServiceMatcher(services []string) func(string) bool {
-	exact := map[string]struct{}{}
-	prefixes := []string{}
-
-	for _, s := range services {
-		s = strings.TrimSpace(s)
-
-		if s == "" {
-			continue
-		}
-
-		if before, ok := strings.CutSuffix(s, "*"); ok {
-			prefixes = append(prefixes, before)
-		} else {
-			exact[s] = struct{}{}
-		}
-	}
-
-	return func(name string) bool {
-		if len(exact) == 0 && len(prefixes) == 0 {
-			return true
-		}
-
-		name = strings.TrimSuffix(name, ".log")
-
-		if _, ok := exact[name]; ok {
-			return true
-		}
-
-		for _, p := range prefixes {
-			if strings.HasPrefix(name, p) {
-				return true
-			}
-		}
-
-		return false
-	}
-}
-
-func isLogFile(name string) bool {
-	return strings.HasSuffix(name, ".log")
 }

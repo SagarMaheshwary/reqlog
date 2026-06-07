@@ -93,7 +93,7 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 			Out:            os.Stdout,
 			ErrOut:         os.Stderr,
 			Now:            time.Now(),
-			FS:             transport.NewFileSystem(nil),
+			LogFileReader:  transport.NewLogFileReader(nil),
 		})
 		files, err := fs.ListSources(b.Context())
 		if err != nil {
@@ -133,7 +133,7 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 			Out:            os.Stdout,
 			ErrOut:         os.Stderr,
 			Now:            time.Now(),
-			FS:             transport.NewFileSystem(nil),
+			LogFileReader:  transport.NewLogFileReader(nil),
 		})
 		files, err := fs.ListSources(b.Context())
 		if err != nil {

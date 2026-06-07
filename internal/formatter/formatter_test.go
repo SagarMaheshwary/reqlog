@@ -43,7 +43,11 @@ func TestFormat_OutputStructure(t *testing.T) {
 	entry := domain.LogEntry{
 		Timestamp: ts,
 		Service:   "api",
-		Message:   "level=info message=test request_id=xyz",
+		Message:   "test",
+		Fields: map[string]any{
+			"request_id": "req-456",
+			"level":      "warn",
+		},
 	}
 
 	entries := []domain.LogEntry{
@@ -64,6 +68,54 @@ func TestFormat_OutputStructure(t *testing.T) {
 
 	if !strings.Contains(out, "[api]") {
 		t.Fatalf("expected service [api] in output")
+	}
+
+	if !strings.Contains(out, "test") {
+		t.Fatalf("expected main message 'test' in output")
+	}
+
+	if !strings.Contains(out, " | ") {
+		t.Fatalf("expected ' | ' separator")
+	}
+
+	// Ensure key/value parts include request_id
+	if !strings.Contains(out, "request_id") {
+		t.Fatalf("expected 'request_id' in output")
+	}
+}
+
+func TestFormat_OutputStructure_WithHost(t *testing.T) {
+	ts := time.Date(2026, 3, 20, 14, 10, 0, 0, time.UTC)
+
+	entry := domain.LogEntry{
+		Timestamp: ts,
+		Service:   "api",
+		Message:   "test",
+		Host:      "srv",
+		Fields: map[string]any{
+			"request_id": "req-456",
+			"level":      "warn",
+		},
+	}
+
+	entries := []domain.LogEntry{
+		entry,
+		{Service: "longer-service"},
+	}
+
+	f := NewFormatter(&Opts{
+		Entries:    entries,
+		SearchKeys: []string{"request_id"},
+		Output:     config.OutputPretty,
+	})
+	out := f.Format(entry)
+
+	if !strings.Contains(out, ts.Format(tsFormat)) {
+		t.Fatalf("expected timestamp in output")
+	}
+
+	if !strings.Contains(out, "[srv:api]") {
+		t.Fatalf("expected service [srv:api] in output")
 	}
 
 	if !strings.Contains(out, "test") {
@@ -187,6 +239,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 					"user": "123",
 				},
 				IsContext: false,
+				Host:      "srv",
 			},
 			context: 0,
 			assert: func(t *testing.T, m map[string]any) {
@@ -198,6 +251,9 @@ func TestFormatter_OutputJSON(t *testing.T) {
 				}
 				if m["user"] != "123" {
 					t.Fatalf("field user missing or wrong: %v", m["user"])
+				}
+				if m["host"] != "srv" {
+					t.Fatalf("field host missing or wrong: %v", m["host"])
 				}
 			},
 		},

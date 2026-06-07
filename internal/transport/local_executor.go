@@ -27,10 +27,6 @@ func (e *LocalExecutor) Run(name string, args ...string) (io.ReadCloser, error) 
 	}, nil
 }
 
-func (e *LocalExecutor) RunCombined(name string, args ...string) (io.ReadCloser, error) {
-	return e.Run(name, args...)
-}
-
 func (e *LocalExecutor) Output(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).Output()
 }

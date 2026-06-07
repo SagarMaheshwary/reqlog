@@ -1,17 +1,8 @@
 package transport
 
 import (
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
-
-func NewFileSystem(client *sftp.Client) FileSystem {
-	if client != nil {
-		return &SSHFileSystem{client: client}
-	}
-
-	return &LocalFileSystem{}
-}
 
 func NewExecutor(client *ssh.Client) Executor {
 	if client != nil {
@@ -19,4 +10,12 @@ func NewExecutor(client *ssh.Client) Executor {
 	}
 
 	return &LocalExecutor{}
+}
+
+func NewLogFileReader(executor Executor) LogFileReader {
+	if executor != nil {
+		return &SSHLogFileReader{executor: executor}
+	}
+
+	return &LocalLogFileReader{}
 }

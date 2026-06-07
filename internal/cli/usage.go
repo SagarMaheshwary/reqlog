@@ -6,7 +6,7 @@ import (
 )
 
 func Usage() {
-	fmt.Fprintf(flag.CommandLine.Output(), `reqlog - Search and trace requests across files, Docker, and SSH logs — fast.
+	fmt.Fprintf(flag.CommandLine.Output(), `reqlog - Search, trace, and stream logs across files, Docker containers, and remote hosts.
 
 Usage:
   reqlog [flags] <search_value>

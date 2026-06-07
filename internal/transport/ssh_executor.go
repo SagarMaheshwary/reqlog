@@ -58,11 +58,10 @@ func (e *SSHExecutor) Run(name string, args ...string) (io.ReadCloser, error) {
 		wg.Wait()
 	}()
 
-	return pr, nil
-}
-
-func (e *SSHExecutor) RunCombined(name string, args ...string) (io.ReadCloser, error) {
-	return e.Run(name, append(args, "2>&1")...)
+	return &SSHReadCloser{
+		Reader:  pr,
+		session: session,
+	}, nil
 }
 
 func (e *SSHExecutor) Output(name string, args ...string) ([]byte, error) {
@@ -84,11 +83,8 @@ type SSHReadCloser struct {
 
 func (r *SSHReadCloser) Close() error {
 	waitErr := r.session.Wait()
-	closeErr := r.session.Close()
 
-	if waitErr != nil {
-		return waitErr
-	}
+	_ = r.session.Close()
 
-	return closeErr
+	return waitErr
 }
