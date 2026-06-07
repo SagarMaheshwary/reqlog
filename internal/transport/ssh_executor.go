@@ -82,9 +82,6 @@ type SSHReadCloser struct {
 }
 
 func (r *SSHReadCloser) Close() error {
-	waitErr := r.session.Wait()
-
-	_ = r.session.Close()
-
-	return waitErr
+	r.session.Close()
+	return nil
 }
