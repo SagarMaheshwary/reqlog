@@ -111,10 +111,6 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 
 	msg := f.renderPrettyMessage(entry)
 
-	if entry.IsContext {
-		msg = dim + msg + reset
-	}
-
 	service := entry.Service
 
 	if entry.Host != "" {
@@ -140,47 +136,81 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
-	level, fields := f.renderPrettyFields(entry.Fields)
+	level, fields := f.renderPrettyFields(entry.Fields, entry.IsContext)
 
 	if entry.Message == "" {
 		return fields
 	}
 
-	if fields == "" {
-		return entry.Message
+	message := entry.Message
+	if entry.IsContext {
+		message = dim + entry.Message + reset
+	} else {
+		message = f.colorizer.Bold(entry.Message) + reset
 	}
 
-	return level + " " + f.colorizer.Bold(entry.Message) + reset + " " + fields
+	if fields == "" {
+		return message
+	}
+
+	return strings.TrimSpace(level + " " + message + " " + fields)
 }
 
-func (f *Formatter) renderPrettyFields(fields map[string]any) (string, string) {
-	var kvParts []string
-	var level string
+func (f *Formatter) renderPrettyFields(
+	fields map[string]any,
+	isContext bool,
+) (string, string) {
+	var (
+		kvParts []string
+		level   string
+	)
 
 	for _, pair := range sortKVByPriority(fields) {
 		key := pair.key
 		val := pair.value
 
-		renderedVal := stringifyValue(val)
-
 		if key == "level" {
 			level = f.colorLevel(val)
+			if isContext {
+				level = dim + level + reset
+			}
 			continue
 		}
 
-		key = f.highlightKey(key)
-
 		kvParts = append(
 			kvParts,
-			fmt.Sprintf(
-				"%s=%s",
-				f.colorizer.Cyan(key),
-				renderedVal,
-			),
+			f.renderPrettyField(key, val, isContext),
 		)
 	}
 
 	return level, strings.Join(kvParts, " ")
+}
+
+func (f *Formatter) renderPrettyField(
+	key string,
+	val any,
+	isContext bool,
+) string {
+	renderedVal := stringifyValue(val)
+
+	if isContext {
+		return fmt.Sprintf(
+			"%s%s%s=%s%s",
+			dim,
+			f.colorizer.Cyan(key),
+			dim,
+			dim,
+			renderedVal,
+		)
+	}
+
+	key = f.highlightKey(key)
+
+	return fmt.Sprintf(
+		"%s=%s",
+		f.colorizer.Cyan(key),
+		renderedVal,
+	)
 }
 
 func (f *Formatter) colorLevel(v any) string {

@@ -196,18 +196,62 @@ func TestFormatter_Format_ContextEntry(t *testing.T) {
 	entry := domain.LogEntry{
 		Timestamp: mustParseTime(t, "2024-03-10T12:00:00Z"),
 		Service:   "auth",
-		Message:   "user=123 status=ok",
+		Message:   "request completed",
 		IsContext: true,
+		Fields: map[string]any{
+			"level":      "info",
+			"request_id": "abc123",
+			"status":     "ok",
+		},
 	}
 
 	got := f.Format(entry)
 
-	if !strings.Contains(got, dim) {
-		t.Fatalf("expected formatted output to contain dim ANSI code, got %q", got)
-	}
+	// Level should be dimmed
+	assertContains(
+		t,
+		strings.ToLower(got),
+		"info",
+	)
+	// Message should be dimmed
+	assertContains(
+		t,
+		got,
+		dim+"request completed"+reset,
+	)
 
-	if !strings.Contains(got, "user") {
-		t.Fatalf("expected formatted output to contain message fields, got %q", got)
+	// Fields should be dimmed
+	assertContains(
+		t,
+		got,
+		dim+f.colorizer.Cyan("request_id"),
+	)
+	assertContains(
+		t,
+		got,
+		"="+dim+"abc123",
+	)
+	assertContains(
+		t,
+		got,
+		dim+f.colorizer.Cyan("status"),
+	)
+	assertContains(
+		t,
+		got,
+		"="+dim+"ok",
+	)
+}
+
+func assertContains(t *testing.T, got, want string) {
+	t.Helper()
+
+	if !strings.Contains(got, want) {
+		t.Fatalf(
+			"expected output to contain %q, got %q",
+			want,
+			got,
+		)
 	}
 }
 
