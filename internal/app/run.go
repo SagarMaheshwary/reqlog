@@ -66,6 +66,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		SearchKeys: cfg.Keys,
 		Output:     cfg.Output,
 		Context:    cfg.Context,
+		Fields:     cfg.Fields,
 	})
 
 	for _, e := range allEntries {

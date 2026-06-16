@@ -34,6 +34,7 @@ type Config struct {
 	Services    []string
 	Latest      bool
 	Context     int
+	Fields      []string
 
 	Source Source
 	Follow bool

@@ -20,6 +20,7 @@ type Formatter struct {
 	searchKeys   []string
 	output       config.OutputFormat
 	context      int
+	fields       []string
 }
 
 type Opts struct {
@@ -27,6 +28,7 @@ type Opts struct {
 	SearchKeys []string
 	Output     config.OutputFormat
 	Context    int
+	Fields     []string
 }
 
 func NewFormatter(opts *Opts) *Formatter {
@@ -43,6 +45,7 @@ func NewFormatter(opts *Opts) *Formatter {
 		searchKeys:   opts.SearchKeys,
 		output:       opts.Output,
 		context:      opts.Context,
+		fields:       opts.Fields,
 	}
 }
 
@@ -67,6 +70,10 @@ func (f *Formatter) Format(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) outputJSON(entry domain.LogEntry) string {
+	if len(f.fields) > 0 {
+		return f.outputJSONFields(entry)
+	}
+
 	out := make(map[string]any, len(entry.Fields)+6)
 
 	out["timestamp"] = entry.Timestamp.Format(time.RFC3339Nano)
@@ -90,19 +97,50 @@ func (f *Formatter) outputJSON(entry domain.LogEntry) string {
 		}
 	}
 
-	b, err := json.Marshal(out)
-	if err == nil {
-		return string(b)
+	return marshal(out, entry)
+}
+
+func (f *Formatter) outputJSONFields(
+	entry domain.LogEntry,
+) string {
+	out := make(map[string]any, len(f.fields))
+
+	for _, k := range f.fields {
+		switch k {
+		case "timestamp":
+			out[k] = entry.Timestamp.Format(time.RFC3339Nano)
+
+		case "service":
+			out[k] = entry.Service
+
+		case "message":
+			out[k] = entry.Message
+
+		case "context":
+			if f.context > 0 {
+				out[k] = entry.IsContext
+			}
+
+		case "host":
+			if entry.Host != "" {
+				out[k] = entry.Host
+			}
+
+		default:
+			fieldKey := k
+
+			// allow "fields." prefix to explicitly access fields
+			// when there's a name conflict with core keys
+			if after, ok := strings.CutPrefix(k, "fields."); ok {
+				fieldKey = after
+			}
+			if val, ok := entry.Fields[fieldKey]; ok {
+				out[k] = val
+			}
+		}
 	}
 
-	errorOut := map[string]any{
-		"error":   "failed to marshal log entry",
-		"details": err.Error(),
-		"raw":     entry.Raw,
-	}
-
-	fallback, _ := json.Marshal(errorOut)
-	return string(fallback)
+	return marshal(out, entry)
 }
 
 func (f *Formatter) outputPretty(entry domain.LogEntry) string {
@@ -136,7 +174,7 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
-	level, fields := f.renderPrettyFields(entry.Fields, entry.IsContext)
+	level, fields := f.renderPrettyFields(entry.Fields, entry.IsContext, f.fields)
 
 	if entry.Message == "" {
 		return fields
@@ -149,37 +187,62 @@ func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
 		message = f.colorizer.Bold(entry.Message) + reset
 	}
 
-	if fields == "" {
-		return message
-	}
-
 	return strings.TrimSpace(level + " " + message + " " + fields)
 }
 
 func (f *Formatter) renderPrettyFields(
 	fields map[string]any,
 	isContext bool,
+	fieldsToInclude []string,
 ) (string, string) {
 	var (
 		kvParts []string
 		level   string
 	)
 
-	for _, pair := range sortKVByPriority(fields) {
-		key := pair.key
-		val := pair.value
+	if val, ok := fields["level"]; ok {
+		level = f.colorLevel(val)
 
-		if key == "level" {
-			level = f.colorLevel(val)
-			if isContext {
-				level = dim + level + reset
+		if isContext {
+			level = dim + level + reset
+		}
+	}
+
+	kvParts = make([]string, 0, len(fields))
+
+	// Respect --fields order
+	if len(fieldsToInclude) > 0 {
+		for _, key := range fieldsToInclude {
+			val, ok := fields[key]
+			if !ok || key == "level" {
+				continue
 			}
+
+			kvParts = append(
+				kvParts,
+				f.renderPrettyField(key, val, isContext),
+			)
+		}
+
+		return level, strings.Join(kvParts, " ")
+	}
+
+	keys := make([]string, 0, len(fields))
+
+	for key := range fields {
+		if key == "level" {
 			continue
 		}
 
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+
+	for _, key := range keys {
 		kvParts = append(
 			kvParts,
-			f.renderPrettyField(key, val, isContext),
+			f.renderPrettyField(key, fields[key], isContext),
 		)
 	}
 
@@ -236,46 +299,6 @@ func (f *Formatter) highlightKey(key string) string {
 	return key
 }
 
-type kv struct {
-	key   string
-	value any
-}
-
-func sortKVByPriority(fields map[string]any) []kv {
-	pairs := make([]kv, 0, len(fields))
-
-	for k, v := range fields {
-		pairs = append(pairs, kv{
-			key:   k,
-			value: v,
-		})
-	}
-
-	priority := func(key string) int {
-		switch key {
-		case "level":
-			return 1
-		case "request_id":
-			return 2
-		default:
-			return 99
-		}
-	}
-
-	sort.SliceStable(pairs, func(i, j int) bool {
-		pi := priority(pairs[i].key)
-		pj := priority(pairs[j].key)
-
-		if pi != pj {
-			return pi < pj
-		}
-
-		return pairs[i].key < pairs[j].key
-	})
-
-	return pairs
-}
-
 func stringifyValue(v any) string {
 	switch val := v.(type) {
 	case string:
@@ -291,4 +314,20 @@ func stringifyValue(v any) string {
 		}
 		return string(b)
 	}
+}
+
+func marshal(out any, entry domain.LogEntry) string {
+	b, err := json.Marshal(out)
+	if err == nil {
+		return string(b)
+	}
+
+	errorOut := map[string]any{
+		"error":   "failed to marshal log entry",
+		"details": err.Error(),
+		"raw":     entry.Raw,
+	}
+
+	fallback, _ := json.Marshal(errorOut)
+	return string(fallback)
 }
