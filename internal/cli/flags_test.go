@@ -85,6 +85,7 @@ func TestApplyDerivedConfig(t *testing.T) {
 			source:  "docker",
 			output:  "json",
 			format:  "text",
+			fields:  "request_id,status",
 		}
 
 		err := applyDerivedConfig(cfg, opts)
@@ -110,6 +111,10 @@ func TestApplyDerivedConfig(t *testing.T) {
 
 		if cfg.Format != config.FormatText {
 			t.Fatalf("format: expected %v got %v", config.FormatText, cfg.Format)
+		}
+
+		if !reflect.DeepEqual(cfg.Fields, []string{"request_id", "status"}) {
+			t.Fatalf("fields: expected %v got %v", []string{"request_id", "status"}, cfg.Fields)
 		}
 	})
 

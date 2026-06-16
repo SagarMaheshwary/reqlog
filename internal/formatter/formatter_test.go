@@ -2,7 +2,6 @@ package formatter
 
 import (
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -132,69 +131,13 @@ func TestFormat_OutputStructure_WithHost(t *testing.T) {
 	}
 }
 
-func TestSortKVByPriority(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    map[string]any
-		expected []kv
-	}{
-		{
-			name: "prioritizes level then request_id",
-			input: map[string]any{
-				"extra":      "foo",
-				"request_id": "abc",
-				"level":      "warn",
-			},
-			expected: []kv{
-				{key: "level", value: "warn"},
-				{key: "request_id", value: "abc"},
-				{key: "extra", value: "foo"},
-			},
-		},
-		{
-			name: "alphabetical fallback for equal priority",
-			input: map[string]any{
-				"zeta":  "1",
-				"alpha": "2",
-			},
-			expected: []kv{
-				{key: "alpha", value: "2"},
-				{key: "zeta", value: "1"},
-			},
-		},
-		{
-			name: "mixed priority and alphabetical",
-			input: map[string]any{
-				"beta":       "b",
-				"level":      "info",
-				"request_id": "r1",
-				"alpha":      "a",
-			}, expected: []kv{
-				{key: "level", value: "info"},
-				{key: "request_id", value: "r1"},
-				{key: "alpha", value: "a"},
-				{key: "beta", value: "b"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sortKVByPriority(tt.input)
-			if !reflect.DeepEqual(got, tt.expected) {
-				t.Errorf("got %v; want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestFormatter_Format_ContextEntry(t *testing.T) {
 	f := NewFormatter(&Opts{
 		Output: config.OutputPretty,
 	})
 
 	entry := domain.LogEntry{
-		Timestamp: mustParseTime(t, "2024-03-10T12:00:00Z"),
+		Timestamp: mustParseRFC3339(t, "2024-03-10T12:00:00Z"),
 		Service:   "auth",
 		Message:   "request completed",
 		IsContext: true,
@@ -243,29 +186,6 @@ func TestFormatter_Format_ContextEntry(t *testing.T) {
 	)
 }
 
-func assertContains(t *testing.T, got, want string) {
-	t.Helper()
-
-	if !strings.Contains(got, want) {
-		t.Fatalf(
-			"expected output to contain %q, got %q",
-			want,
-			got,
-		)
-	}
-}
-
-func mustParseTime(t *testing.T, s string) time.Time {
-	t.Helper()
-
-	ts, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return ts
-}
-
 func TestFormatter_OutputJSON(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -276,7 +196,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 		{
 			name: "basic json output",
 			entry: domain.LogEntry{
-				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Timestamp: mustParseRFC3339(t, "2024-03-10T12:00:00Z"),
 				Service:   "auth",
 				Message:   "login success",
 				Fields: map[string]any{
@@ -305,7 +225,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 		{
 			name: "context flag is included",
 			entry: domain.LogEntry{
-				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Timestamp: mustParseRFC3339(t, "2024-03-10T12:00:00Z"),
 				Service:   "auth",
 				Message:   "login",
 				IsContext: true,
@@ -321,7 +241,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 		{
 			name: "reserved keys are prefixed into fields.*",
 			entry: domain.LogEntry{
-				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Timestamp: mustParseRFC3339(t, "2024-03-10T12:00:00Z"),
 				Service:   "auth",
 				Message:   "test",
 				Fields: map[string]any{
@@ -355,7 +275,7 @@ func TestFormatter_OutputJSON(t *testing.T) {
 		{
 			name: "multiple fields preserved",
 			entry: domain.LogEntry{
-				Timestamp: mustParseRFC3339("2024-03-10T12:00:00Z"),
+				Timestamp: mustParseRFC3339(t, "2024-03-10T12:00:00Z"),
 				Service:   "svc",
 				Message:   "ok",
 				Fields: map[string]any{
@@ -439,10 +359,316 @@ func TestFormatter_OutputJSON_MarshalError(t *testing.T) {
 	}
 }
 
-func mustParseRFC3339(s string) time.Time {
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		panic(err)
+func TestFormatter_OutputJSONFields(t *testing.T) {
+	ts := time.Date(2026, 3, 20, 14, 10, 0, 0, time.UTC)
+
+	tests := []struct {
+		name   string
+		fields []string
+		entry  domain.LogEntry
+		assert func(t *testing.T, m map[string]any)
+	}{
+		{
+			name:   "full json output",
+			fields: nil,
+			entry: domain.LogEntry{
+				Timestamp: ts,
+				Service:   "api",
+				Message:   "hello",
+				Host:      "srv1",
+				IsContext: true,
+				Fields: map[string]any{
+					"request_id": "req-123",
+				},
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if m["timestamp"] != ts.Format(time.RFC3339Nano) {
+					t.Fatalf("unexpected timestamp: %v", m["timestamp"])
+				}
+
+				if m["service"] != "api" {
+					t.Fatalf("unexpected service: %v", m["service"])
+				}
+
+				if m["message"] != "hello" {
+					t.Fatalf("unexpected message: %v", m["message"])
+				}
+
+				if m["host"] != "srv1" {
+					t.Fatalf("unexpected host: %v", m["host"])
+				}
+
+				if m["request_id"] != "req-123" {
+					t.Fatalf("unexpected request_id: %v", m["request_id"])
+				}
+
+				if m["context"] != true {
+					t.Fatalf("unexpected context: %v", m["context"])
+				}
+			},
+		},
+		{
+			name:   "selected fields output",
+			fields: []string{"timestamp", "service", "request_id"},
+			entry: domain.LogEntry{
+				Timestamp: ts,
+				Service:   "api",
+				Message:   "ignored",
+				Fields: map[string]any{
+					"request_id": "req-123",
+					"level":      "warn",
+				},
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if len(m) != 3 {
+					t.Fatalf("expected 3 fields, got %d: %#v", len(m), m)
+				}
+
+				if m["timestamp"] != ts.Format(time.RFC3339Nano) {
+					t.Fatalf("unexpected timestamp")
+				}
+
+				if m["service"] != "api" {
+					t.Fatalf("unexpected service")
+				}
+
+				if m["request_id"] != "req-123" {
+					t.Fatalf("unexpected request_id")
+				}
+
+				if _, ok := m["message"]; ok {
+					t.Fatalf("message should not be included")
+				}
+			},
+		},
+		{
+			name:   "fields prefix accesses conflicting field names",
+			fields: []string{"timestamp", "fields.timestamp", "service", "fields.service", "message", "context", "fields.context", "host", "fields.host"},
+			entry: domain.LogEntry{
+				Timestamp: ts,
+				Service:   "api",
+				IsContext: true,
+				Host:      "srv",
+				Fields: map[string]any{
+					"timestamp": "field-ts",
+					"service":   "field-service",
+					"context":   "field-context",
+					"host":      "field-host",
+				},
+			},
+			assert: func(t *testing.T, m map[string]any) {
+				if m["timestamp"] != ts.Format(time.RFC3339Nano) {
+					t.Fatalf("unexpected timestamp: %v", m["timestamp"])
+				}
+
+				if m["service"] != "api" {
+					t.Fatalf("unexpected service: %v", m["service"])
+				}
+
+				if m["fields.timestamp"] != "field-ts" {
+					t.Fatalf("unexpected fields.timestamp: %v", m["fields.timestamp"])
+				}
+
+				if m["fields.service"] != "field-service" {
+					t.Fatalf("unexpected fields.service: %v", m["fields.service"])
+				}
+
+				if m["context"] != true {
+					t.Fatalf("unexpected context: %v", m["context"])
+				}
+
+				if m["fields.context"] != "field-context" {
+					t.Fatalf("unexpected fields.context: %v", m["fields.context"])
+				}
+
+				if m["host"] != "srv" {
+					t.Fatalf("unexpected host: %v", m["host"])
+				}
+
+				if m["fields.host"] != "field-host" {
+					t.Fatalf("unexpected fields.host: %v", m["fields.host"])
+				}
+			},
+		},
 	}
-	return t
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := NewFormatter(&Opts{
+				Output:  config.OutputJSON,
+				Fields:  tt.fields,
+				Context: 1,
+			})
+
+			out := f.Format(tt.entry)
+
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+				t.Fatalf("invalid json: %v\n%s", err, out)
+			}
+
+			tt.assert(t, decoded)
+		})
+	}
+}
+
+func TestFormatter_RenderPrettyFields(t *testing.T) {
+	tests := []struct {
+		name            string
+		fields          map[string]any
+		fieldsToInclude []string
+
+		wantLevel       bool
+		wantContains    []string
+		wantNotContains []string
+		wantOrder       []string
+	}{
+		{
+			name: "sorted fields and level extraction",
+			fields: map[string]any{
+				"request_id": "abc",
+				"user":       "123",
+				"level":      "info",
+			},
+			wantLevel: true,
+			wantContains: []string{
+				"request_id",
+				"user",
+			},
+			wantOrder: []string{
+				"request_id",
+				"user",
+			},
+		},
+		{
+			name: "respects fields order",
+			fields: map[string]any{
+				"user":       "123",
+				"request_id": "abc",
+				"trace_id":   "xyz",
+			},
+			fieldsToInclude: []string{
+				"trace_id",
+				"user",
+			},
+			wantContains: []string{
+				"trace_id",
+				"user",
+			},
+			wantNotContains: []string{
+				"request_id",
+			},
+			wantOrder: []string{
+				"trace_id",
+				"user",
+			},
+		},
+		{
+			name: "level skipped from included fields",
+			fields: map[string]any{
+				"level": "error",
+				"user":  "123",
+			},
+			fieldsToInclude: []string{
+				"level",
+				"user",
+			},
+			wantLevel: true,
+			wantContains: []string{
+				"user",
+			},
+			wantNotContains: []string{
+				"level",
+			},
+		},
+		{
+			name: "missing requested fields ignored",
+			fields: map[string]any{
+				"user": "123",
+			},
+			fieldsToInclude: []string{
+				"trace_id",
+				"user",
+			},
+			wantContains: []string{
+				"user",
+			},
+			wantNotContains: []string{
+				"trace_id",
+			},
+		},
+	}
+
+	f := NewFormatter(&Opts{})
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			level, out := f.renderPrettyFields(
+				tt.fields,
+				false,
+				tt.fieldsToInclude,
+			)
+
+			if tt.wantLevel && level == "" {
+				t.Fatal("expected level output")
+			}
+
+			if !tt.wantLevel && level != "" {
+				t.Fatalf("expected no level, got %q", level)
+			}
+
+			for _, s := range tt.wantContains {
+				if !strings.Contains(out, s) {
+					t.Fatalf("expected %q in output: %q", s, out)
+				}
+			}
+
+			for _, s := range tt.wantNotContains {
+				if strings.Contains(out, s) {
+					t.Fatalf("did not expect %q in output: %q", s, out)
+				}
+			}
+
+			for i := 0; i < len(tt.wantOrder)-1; i++ {
+				left := strings.Index(out, tt.wantOrder[i])
+				right := strings.Index(out, tt.wantOrder[i+1])
+
+				if left == -1 || right == -1 {
+					t.Fatalf("order check failed: %q", out)
+				}
+
+				if left > right {
+					t.Fatalf(
+						"expected %q before %q in %q",
+						tt.wantOrder[i],
+						tt.wantOrder[i+1],
+						out,
+					)
+				}
+			}
+		})
+	}
+}
+
+func assertContains(t *testing.T, got, want string) {
+	t.Helper()
+
+	if !strings.Contains(got, want) {
+		t.Fatalf(
+			"expected output to contain %q, got %q",
+			want,
+			got,
+		)
+	}
+}
+
+func mustParseRFC3339(t *testing.T, s string) time.Time {
+	t.Helper()
+
+	ts, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return ts
 }

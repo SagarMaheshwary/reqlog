@@ -16,6 +16,7 @@ type flagOptions struct {
 	output  string
 	format  string
 	config  string
+	fields  string
 }
 
 func ParseConfig() (*config.Config, error) {
@@ -170,6 +171,14 @@ func registerFlags(cfg *config.Config) *flagOptions {
 		"SSH host alias from config file",
 	)
 
+	stringFlag(
+		&opts.fields,
+		"fields",
+		"",
+		"",
+		"display only selected fields (comma-separated, e.g. request_id,path,status)",
+	)
+
 	return opts
 }
 
@@ -194,6 +203,10 @@ func applyDerivedConfig(cfg *config.Config, opts *flagOptions) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if opts.fields != "" {
+		cfg.Fields = strings.Split(opts.fields, ",")
 	}
 
 	return nil
