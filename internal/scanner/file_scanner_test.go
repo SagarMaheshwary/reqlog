@@ -3,6 +3,7 @@ package scanner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +15,9 @@ import (
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
+	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
+	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/transport"
 )
 
@@ -24,9 +27,9 @@ func newTestFileScanner(cfg *Config) *FileScanner {
 		LineProcessor:  lp,
 		FollowInterval: time.Second,
 		Out:            io.Discard,
-		ErrOut:         io.Discard,
 		Now:            time.Now(),
 		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
 	})
 }
 
@@ -57,9 +60,9 @@ func TestFileScanner_Scan(t *testing.T) {
 		LineProcessor:  lp,
 		FollowInterval: time.Second,
 		Out:            io.Discard,
-		ErrOut:         io.Discard,
 		Now:            time.Now(),
 		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
 	})
 
 	files, err := fs.ListSources(t.Context())
@@ -106,9 +109,9 @@ func TestFileScanner_Scan_WithSince(t *testing.T) {
 		LineProcessor:  lp,
 		FollowInterval: time.Second,
 		Out:            io.Discard,
-		ErrOut:         io.Discard,
 		Now:            time.Now(),
 		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
 	})
 	files, err := fs.ListSources(t.Context())
 	if err != nil {
@@ -142,9 +145,9 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 		LineProcessor:  lp,
 		FollowInterval: time.Second,
 		Out:            io.Discard,
-		ErrOut:         io.Discard,
 		Now:            time.Now(),
 		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
 	})
 	files, err := fs.ListSources(t.Context())
 	if err != nil {
@@ -177,9 +180,9 @@ func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 		LineProcessor:  lp,
 		FollowInterval: time.Second,
 		Out:            io.Discard,
-		ErrOut:         io.Discard,
 		Now:            time.Now(),
 		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
 	})
 	files, err := fs.ListSources(t.Context())
 	if err != nil {
@@ -334,40 +337,6 @@ func TestScan_NoTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestFileScanner_Scan_ErrorLogging(t *testing.T) {
-	cfg := &Config{
-		SearchValue: "123",
-		Keys:        []string{"user"},
-	}
-	lp := NewLineProcessor(cfg, NewTimeParser())
-
-	// pass a missing file to trigger error
-	files := []string{"/tmp/nonexistent.log"}
-
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	fs := NewFileScanner(&FileScannerOpts{
-		LineProcessor:  lp,
-		FollowInterval: time.Second,
-		Out:            &out,
-		ErrOut:         &errOut,
-		Now:            time.Now(),
-		LogFileReader:  transport.NewLogFileReader(nil),
-	})
-	results, err := fs.Scan(t.Context(), files)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(results) != 0 {
-		t.Errorf("expected 0 results, got %d", len(results))
-	}
-
-	if !strings.Contains(errOut.String(), "/tmp/nonexistent.log") {
-		t.Errorf("expected error log, got %q", errOut.String())
-	}
-}
-
 func TestFileScanner_Scan_InvalidSince(t *testing.T) {
 	dir := t.TempDir()
 
@@ -434,9 +403,9 @@ func TestFileScanner_Scan_JSON(t *testing.T) {
 				LineProcessor:  lp,
 				FollowInterval: time.Second,
 				Out:            io.Discard,
-				ErrOut:         io.Discard,
 				Now:            time.Now(),
 				LogFileReader:  transport.NewLogFileReader(nil),
+				Diagnostics:    diagnostics.NewDiagnostics(),
 			})
 			files, err := fs.ListSources(t.Context())
 			if err != nil {
@@ -634,6 +603,49 @@ func TestListSources(t *testing.T) {
 	}
 }
 
+func TestListSources_OnErrorCallback(t *testing.T) {
+	fs := newTestFileScanner(&Config{})
+
+	fs.logFileReader = &mockLogFileReader{
+		listFilesFn: func(
+			ctx context.Context,
+			dir string,
+			opts transport.ListOptions,
+		) ([]string, error) {
+			if opts.OnError != nil {
+				opts.OnError("/tmp/bad.log", errors.New("permission denied"))
+			}
+
+			return []string{"auth.log"}, nil
+		},
+	}
+
+	files, err := fs.ListSources(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(files, []string{"auth.log"}) {
+		t.Fatalf("expected files returned, got %v", files)
+	}
+
+	entries := fs.diagnostics.Entries()
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 diagnostic entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+
+	if entry.Fields["level"] != "error" {
+		t.Fatalf("expected error level, got %v", entry.Fields["level"])
+	}
+
+	if !strings.Contains(entry.Message, "Error listing file /tmp/bad.log") {
+		t.Fatalf("unexpected message: %q", entry.Message)
+	}
+}
+
 func TestFileScanner_Follow(t *testing.T) {
 	dir := t.TempDir()
 
@@ -697,9 +709,9 @@ func TestFileScanner_Follow(t *testing.T) {
 				LineProcessor:  lp,
 				FollowInterval: 10 * time.Millisecond,
 				Out:            &out,
-				ErrOut:         io.Discard,
 				Now:            time.Now(),
 				LogFileReader:  transport.NewLogFileReader(nil),
+				Diagnostics:    diagnostics.NewDiagnostics(),
 			})
 
 			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
@@ -733,34 +745,88 @@ func TestFileScanner_Follow(t *testing.T) {
 	}
 }
 
-func TestFileScanner_Follow_Errors(t *testing.T) {
+func TestFileScanner_Scan_OpenErrorCreatesDiagnostic(t *testing.T) {
 	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
+
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
-	var out bytes.Buffer
-	var errOut bytes.Buffer
 	fs := NewFileScanner(&FileScannerOpts{
-		LineProcessor:  lp,
-		FollowInterval: 10 * time.Millisecond,
-		Out:            &out,
-		ErrOut:         &errOut,
-		Now:            time.Now(),
-		LogFileReader:  transport.NewLogFileReader(nil),
+		LineProcessor: lp,
+		Out:           io.Discard,
+		Now:           time.Now(),
+		Diagnostics:   diagnostics.NewDiagnostics(),
 	})
 
-	// pass a missing file to trigger error
-	files := []string{"/tmp/nonexistent.log"}
+	fs.logFileReader = &mockLogFileReader{
+		openFn: func(ctx context.Context, path string) (io.ReadCloser, error) {
+			return nil, errors.New("open failed")
+		},
+	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
+	entries, err := fs.Scan(t.Context(), []string{"app.log"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	fs.Follow(ctx, files, &testFormatter{})
+	if len(entries) != 0 {
+		t.Fatalf("expected no entries, got %d", len(entries))
+	}
 
-	if !strings.Contains(errOut.String(), "error scanning /tmp/nonexistent.log") {
-		t.Errorf("expected error log, got %q", errOut.String())
+	diags := fs.diagnostics.Entries()
+
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
+	}
+
+	want := "Error opening file app.log: open failed"
+
+	if diags[0].Message != want {
+		t.Fatalf("expected %q got %q", want, diags[0].Message)
+	}
+}
+
+func TestFileScanner_ScanFromOffset_SizeErrorCreatesDiagnostic(t *testing.T) {
+	cfg := &Config{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+	}
+
+	lp := NewLineProcessor(cfg, NewTimeParser())
+
+	fs := NewFileScanner(&FileScannerOpts{
+		LineProcessor: lp,
+		Out:           io.Discard,
+		Now:           time.Now(),
+		Diagnostics:   diagnostics.NewDiagnostics(),
+	})
+
+	fs.offsets["app.log"] = 0
+
+	fs.logFileReader = &mockLogFileReader{
+		sizeFn: func(ctx context.Context, path string) (int64, error) {
+			return 0, errors.New("size failed")
+		},
+	}
+
+	f := formatter.NewFormatter(&formatter.Opts{
+		Output: config.OutputPretty,
+	})
+
+	fs.scanFromOffset(t.Context(), "app.log", f)
+
+	diags := fs.diagnostics.Entries()
+
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
+	}
+
+	want := "Error reading file app.log: size failed"
+
+	if diags[0].Message != want {
+		t.Fatalf("expected %q got %q", want, diags[0].Message)
 	}
 }
 

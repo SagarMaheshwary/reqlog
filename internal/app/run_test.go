@@ -95,7 +95,7 @@ func TestScannersForConfig_Local(t *testing.T) {
 
 	lp := newLineProcessor(cfg)
 
-	got, err := scannersForConfig(cfg, lp)
+	got, err := scannersForConfig(cfg, lp, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestScannersForConfig_InvalidHost(t *testing.T) {
 
 	lp := newLineProcessor(cfg)
 
-	_, err := scannersForConfig(cfg, lp)
+	_, err := scannersForConfig(cfg, lp, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}

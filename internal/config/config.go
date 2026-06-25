@@ -35,6 +35,7 @@ type Config struct {
 	Latest      bool
 	Context     int
 	Fields      []string
+	Verbose     bool
 
 	Source Source
 	Follow bool

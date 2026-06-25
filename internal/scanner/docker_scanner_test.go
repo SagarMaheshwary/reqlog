@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
+	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
@@ -29,9 +30,9 @@ func newTestDockerScanner(cfg *Config, client docker.DockerClient) *DockerScanne
 	return NewDockerScanner(&DockerScannerOpts{
 		LineProcessor: lp,
 		Out:           io.Discard,
-		ErrOut:        io.Discard,
 		Now:           time.Now(),
-		dockerClient:  client,
+		DockerClient:  client,
+		Diagnostics:   diagnostics.NewDiagnostics(),
 	})
 }
 
@@ -46,7 +47,6 @@ func TestDockerScanner_Scan(t *testing.T) {
 		cfg        *Config
 		containers []string
 		want       int
-		wantErrLog string
 	}{
 		{
 			name: "single container logs",
@@ -103,16 +103,6 @@ func TestDockerScanner_Scan(t *testing.T) {
 			containers: []string{"good", "bad"},
 			want:       1,
 		},
-		{
-			name: "logs error output",
-			logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
-				return nil, fmt.Errorf("docker scan error")
-			},
-			cfg:        &Config{SearchValue: "123", Keys: []string{"user"}},
-			containers: []string{"auth"},
-			want:       0,
-			wantErrLog: "docker scan error",
-		},
 	}
 
 	for _, tt := range tests {
@@ -123,13 +113,13 @@ func TestDockerScanner_Scan(t *testing.T) {
 			}
 
 			lp := NewLineProcessor(tt.cfg, NewTimeParser())
-			var out, errOut bytes.Buffer
+			var out bytes.Buffer
 			ds := NewDockerScanner(&DockerScannerOpts{
 				LineProcessor: lp,
 				Out:           &out,
-				ErrOut:        &errOut,
 				Now:           time.Now(),
-				dockerClient:  mock,
+				DockerClient:  mock,
+				Diagnostics:   diagnostics.NewDiagnostics(),
 			})
 
 			results, err := ds.Scan(t.Context(), tt.containers)
@@ -140,10 +130,6 @@ func TestDockerScanner_Scan(t *testing.T) {
 			if len(results) != tt.want {
 				fmt.Println(results)
 				t.Errorf("expected %d results, got %d", tt.want, len(results))
-			}
-
-			if tt.wantErrLog != "" && !strings.Contains(errOut.String(), tt.wantErrLog) {
-				t.Errorf("expected error log containing %q, got %q", tt.wantErrLog, errOut.String())
 			}
 		})
 	}
@@ -268,13 +254,12 @@ func TestDockerScanner_Scan_Latest(t *testing.T) {
 
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
-	var out, errOut bytes.Buffer
+	var out bytes.Buffer
 	ds := NewDockerScanner(&DockerScannerOpts{
 		LineProcessor: lp,
 		Out:           &out,
-		ErrOut:        &errOut,
 		Now:           time.Now(),
-		dockerClient:  mock,
+		DockerClient:  mock,
 	})
 
 	results, err := ds.Scan(t.Context(), []string{"a", "b"})
@@ -333,14 +318,14 @@ func TestDockerScanner_Scan_Context(t *testing.T) {
 
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
-	var out, errOut bytes.Buffer
+	var out bytes.Buffer
 
 	ds := NewDockerScanner(&DockerScannerOpts{
 		LineProcessor: lp,
 		Out:           &out,
-		ErrOut:        &errOut,
 		Now:           time.Now(),
-		dockerClient:  mock,
+		DockerClient:  mock,
+		Diagnostics:   diagnostics.NewDiagnostics(),
 	})
 
 	results, err := ds.Scan(t.Context(), []string{"auth"})
@@ -542,9 +527,9 @@ func TestDockerScanner_Follow(t *testing.T) {
 			ds := NewDockerScanner(&DockerScannerOpts{
 				LineProcessor: lp,
 				Out:           &out,
-				ErrOut:        io.Discard,
 				Now:           time.Now(),
-				dockerClient:  client,
+				DockerClient:  client,
+				Diagnostics:   diagnostics.NewDiagnostics(),
 			})
 
 			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
@@ -573,40 +558,93 @@ func TestDockerScanner_Follow(t *testing.T) {
 	}
 }
 
-func TestDockerScanner_Follow_Errors(t *testing.T) {
+func TestDockerScanner_Scan_LogsErrorCreatesDiagnostic(t *testing.T) {
 	cfg := &Config{
 		SearchValue: "123",
 		Keys:        []string{"user"},
 	}
+
 	lp := NewLineProcessor(cfg, NewTimeParser())
 
 	client := &mockDockerClient{
 		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
-			return nil, fmt.Errorf("docker error for %s", container)
+			return nil, errors.New("docker failed")
 		},
-		listFn: func() ([]string, error) { return []string{"auth"}, nil },
 	}
-
-	var out bytes.Buffer
-	var errOut bytes.Buffer
 
 	ds := NewDockerScanner(&DockerScannerOpts{
 		LineProcessor: lp,
-		Out:           &out,
-		ErrOut:        &errOut,
+		DockerClient:  client,
+		Out:           io.Discard,
 		Now:           time.Now(),
-		dockerClient:  client,
+		Diagnostics:   diagnostics.NewDiagnostics(),
 	})
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
+	entries, err := ds.Scan(t.Context(), []string{"auth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("expected no log entries, got %d", len(entries))
+	}
+
+	diags := ds.diagnostics.Entries()
+
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
+	}
+
+	if !diags[0].IsDiagnostics {
+		t.Fatal("expected diagnostic entry")
+	}
+
+	if diags[0].Fields["level"] != "error" {
+		t.Fatalf("expected error level, got %v", diags[0].Fields["level"])
+	}
+
+	want := "Error fetching logs for container auth: docker failed"
+
+	if diags[0].Message != want {
+		t.Fatalf("expected %q got %q", want, diags[0].Message)
+	}
+}
+
+func TestDockerScanner_Follow_LogsErrorCreatesDiagnostic(t *testing.T) {
+	cfg := &Config{
+		SearchValue: "123",
+		Keys:        []string{"user"},
+	}
+
+	lp := NewLineProcessor(cfg, NewTimeParser())
+
+	client := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			return nil, errors.New("docker failed")
+		},
+	}
+
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: lp,
+		DockerClient:  client,
+		Out:           io.Discard,
+		Now:           time.Now(),
+		Diagnostics:   diagnostics.NewDiagnostics(),
+	})
 
 	f := formatter.NewFormatter(&formatter.Opts{
 		Output: config.OutputPretty,
 	})
-	ds.Follow(ctx, []string{"auth"}, f)
 
-	if !strings.Contains(errOut.String(), "docker error for auth") {
-		t.Errorf("expected error log, got %q", errOut.String())
+	ds.Follow(t.Context(), []string{"auth"}, f)
+
+	diags := ds.diagnostics.Entries()
+
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
+	}
+
+	if diags[0].Fields["level"] != "error" {
+		t.Fatalf("expected error level, got %v", diags[0].Fields["level"])
 	}
 }

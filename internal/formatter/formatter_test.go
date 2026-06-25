@@ -514,9 +514,10 @@ func TestFormatter_OutputJSONFields(t *testing.T) {
 
 func TestFormatter_RenderPrettyFields(t *testing.T) {
 	tests := []struct {
-		name            string
-		fields          map[string]any
-		fieldsToInclude []string
+		name string
+
+		entry  domain.LogEntry
+		fields []string
 
 		wantLevel       bool
 		wantContains    []string
@@ -525,10 +526,12 @@ func TestFormatter_RenderPrettyFields(t *testing.T) {
 	}{
 		{
 			name: "sorted fields and level extraction",
-			fields: map[string]any{
-				"request_id": "abc",
-				"user":       "123",
-				"level":      "info",
+			entry: domain.LogEntry{
+				Fields: map[string]any{
+					"request_id": "abc",
+					"user":       "123",
+					"level":      "info",
+				},
 			},
 			wantLevel: true,
 			wantContains: []string{
@@ -542,12 +545,14 @@ func TestFormatter_RenderPrettyFields(t *testing.T) {
 		},
 		{
 			name: "respects fields order",
-			fields: map[string]any{
-				"user":       "123",
-				"request_id": "abc",
-				"trace_id":   "xyz",
+			entry: domain.LogEntry{
+				Fields: map[string]any{
+					"user":       "123",
+					"request_id": "abc",
+					"trace_id":   "xyz",
+				},
 			},
-			fieldsToInclude: []string{
+			fields: []string{
 				"trace_id",
 				"user",
 			},
@@ -565,11 +570,13 @@ func TestFormatter_RenderPrettyFields(t *testing.T) {
 		},
 		{
 			name: "level skipped from included fields",
-			fields: map[string]any{
-				"level": "error",
-				"user":  "123",
+			entry: domain.LogEntry{
+				Fields: map[string]any{
+					"level": "error",
+					"user":  "123",
+				},
 			},
-			fieldsToInclude: []string{
+			fields: []string{
 				"level",
 				"user",
 			},
@@ -583,10 +590,12 @@ func TestFormatter_RenderPrettyFields(t *testing.T) {
 		},
 		{
 			name: "missing requested fields ignored",
-			fields: map[string]any{
-				"user": "123",
+			entry: domain.LogEntry{
+				Fields: map[string]any{
+					"user": "123",
+				},
 			},
-			fieldsToInclude: []string{
+			fields: []string{
 				"trace_id",
 				"user",
 			},
@@ -597,17 +606,32 @@ func TestFormatter_RenderPrettyFields(t *testing.T) {
 				"trace_id",
 			},
 		},
+		{
+			name: "diagnostics ignores fields filter",
+			entry: domain.LogEntry{
+				IsDiagnostics: true,
+				Fields: map[string]any{
+					"user":       "123",
+					"request_id": "abc",
+				},
+			},
+			fields: []string{
+				"user",
+			},
+			wantContains: []string{
+				"user",
+				"request_id",
+			},
+		},
 	}
-
-	f := NewFormatter(&Opts{})
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			level, out := f.renderPrettyFields(
-				tt.fields,
-				false,
-				tt.fieldsToInclude,
-			)
+			f := NewFormatter(&Opts{
+				Fields: tt.fields,
+			})
+
+			level, out := f.renderPrettyFields(tt.entry)
 
 			if tt.wantLevel && level == "" {
 				t.Fatal("expected level output")

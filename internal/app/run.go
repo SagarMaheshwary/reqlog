@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
+	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/scanner"
@@ -16,8 +17,9 @@ import (
 
 func Run(ctx context.Context, cfg *config.Config) error {
 	lp := newLineProcessor(cfg)
+	dg := diagnostics.NewDiagnostics()
 
-	scannerSources, err := scannersForConfig(cfg, lp)
+	scannerSources, err := scannersForConfig(cfg, lp, dg)
 	if err != nil {
 		return err
 	}
@@ -59,6 +61,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 
 		allEntries = allEntries[start:end]
+	}
+
+	if cfg.Verbose {
+		allEntries = append(allEntries, dg.Entries()...)
 	}
 
 	f := formatter.NewFormatter(&formatter.Opts{
@@ -115,13 +121,14 @@ func resolveSource(
 	return sources, nil
 }
 
-func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor) ([]scannerSource, error) {
+func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor, dg *diagnostics.Diagnostics) ([]scannerSource, error) {
 	if cfg.Host == "" {
 		scn, err := scanner.New(&scanner.FactoryOpts{
 			Source:        cfg.Source,
 			LineProcessor: lp,
 			Executor:      transport.NewExecutor(nil),
 			LogFileReader: transport.NewLogFileReader(nil),
+			Diagnostics:   dg,
 		})
 		if err != nil {
 			return nil, err
@@ -151,6 +158,7 @@ func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor) ([]scanner
 			Executor:      executor,
 			LogFileReader: transport.NewLogFileReader(executor),
 			Host:          host,
+			Diagnostics:   dg,
 		})
 		if err != nil {
 			return nil, err
