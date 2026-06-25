@@ -103,7 +103,7 @@ func registerFlags(cfg *config.Config) *flagOptions {
 		&cfg.Recursive,
 		"recursive",
 		"r",
-		true,
+		false,
 		"scan directories recursively",
 	)
 
