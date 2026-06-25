@@ -70,7 +70,7 @@ func (f *Formatter) Format(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) outputJSON(entry domain.LogEntry) string {
-	if len(f.fields) > 0 {
+	if len(f.fields) > 0 && !entry.IsDiagnostics {
 		return f.outputJSONFields(entry)
 	}
 
@@ -174,7 +174,7 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 }
 
 func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
-	level, fields := f.renderPrettyFields(entry.Fields, entry.IsContext, f.fields)
+	level, fields := f.renderPrettyFields(entry)
 
 	if entry.Message == "" {
 		return fields
@@ -190,46 +190,42 @@ func (f *Formatter) renderPrettyMessage(entry domain.LogEntry) string {
 	return strings.TrimSpace(level + " " + message + " " + fields)
 }
 
-func (f *Formatter) renderPrettyFields(
-	fields map[string]any,
-	isContext bool,
-	fieldsToInclude []string,
-) (string, string) {
+func (f *Formatter) renderPrettyFields(entry domain.LogEntry) (string, string) {
 	var (
 		kvParts []string
 		level   string
 	)
 
-	if val, ok := fields["level"]; ok {
+	if val, ok := entry.Fields["level"]; ok {
 		level = f.colorLevel(val)
 
-		if isContext {
+		if entry.IsContext {
 			level = dim + level + reset
 		}
 	}
 
-	kvParts = make([]string, 0, len(fields))
+	kvParts = make([]string, 0, len(entry.Fields))
 
 	// Respect --fields order
-	if len(fieldsToInclude) > 0 {
-		for _, key := range fieldsToInclude {
-			val, ok := fields[key]
+	if len(f.fields) > 0 && !entry.IsDiagnostics {
+		for _, key := range f.fields {
+			val, ok := entry.Fields[key]
 			if !ok || key == "level" {
 				continue
 			}
 
 			kvParts = append(
 				kvParts,
-				f.renderPrettyField(key, val, isContext),
+				f.renderPrettyField(key, val, entry.IsContext),
 			)
 		}
 
 		return level, strings.Join(kvParts, " ")
 	}
 
-	keys := make([]string, 0, len(fields))
+	keys := make([]string, 0, len(entry.Fields))
 
-	for key := range fields {
+	for key := range entry.Fields {
 		if key == "level" {
 			continue
 		}
@@ -242,7 +238,7 @@ func (f *Formatter) renderPrettyFields(
 	for _, key := range keys {
 		kvParts = append(
 			kvParts,
-			f.renderPrettyField(key, fields[key], isContext),
+			f.renderPrettyField(key, entry.Fields[key], entry.IsContext),
 		)
 	}
 

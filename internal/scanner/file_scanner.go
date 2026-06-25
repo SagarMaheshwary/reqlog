@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
 	"github.com/sagarmaheshwary/reqlog/internal/transport"
@@ -19,20 +20,20 @@ type FileScanner struct {
 	lineProcessor  *LineProcessor
 	followInterval time.Duration
 	out            io.Writer
-	errOut         io.Writer
 	now            time.Time
 	logFileReader  transport.LogFileReader
 	host           string
+	diagnostics    *diagnostics.Diagnostics
 }
 
 type FileScannerOpts struct {
 	LineProcessor  *LineProcessor
 	FollowInterval time.Duration
 	Out            io.Writer
-	ErrOut         io.Writer
 	Now            time.Time
 	LogFileReader  transport.LogFileReader
 	Host           string
+	Diagnostics    *diagnostics.Diagnostics
 }
 
 func NewFileScanner(opts *FileScannerOpts) *FileScanner {
@@ -41,10 +42,10 @@ func NewFileScanner(opts *FileScannerOpts) *FileScanner {
 		lineProcessor:  opts.LineProcessor,
 		followInterval: opts.FollowInterval,
 		out:            opts.Out,
-		errOut:         opts.ErrOut,
 		now:            opts.Now,
 		logFileReader:  opts.LogFileReader,
 		host:           opts.Host,
+		diagnostics:    opts.Diagnostics,
 	}
 }
 
@@ -59,7 +60,7 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 	for _, path := range files {
 		file, err := fs.logFileReader.Open(ctx, path)
 		if err != nil {
-			logScanError(fs.errOut, path, err)
+			fs.diagnostics.Error(fmt.Sprintf("Error opening file %s: %v", path, err), nil)
 			continue
 		}
 
@@ -104,7 +105,7 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 		}()
 
 		if err != nil {
-			logScanError(fs.errOut, path, err)
+			fs.diagnostics.Error(fmt.Sprintf("Error reading file %s: %v", path, err), nil)
 		}
 
 		fs.offsets[path] = offset
@@ -139,7 +140,7 @@ func (fs *FileScanner) scanFromOffset(ctx context.Context, path string, f format
 		path,
 	)
 	if err != nil {
-		logScanError(fs.errOut, path, err)
+		fs.diagnostics.Error(fmt.Sprintf("Error reading file %s: %v", path, err), nil)
 		return
 	}
 
@@ -155,7 +156,7 @@ func (fs *FileScanner) scanFromOffset(ctx context.Context, path string, f format
 
 	file, err := fs.logFileReader.OpenFromOffset(ctx, path, offset)
 	if err != nil {
-		logScanError(fs.errOut, path, err)
+		fs.diagnostics.Error(fmt.Sprintf("Error opening file %s: %v", path, err), nil)
 		return
 	}
 	defer file.Close()
@@ -178,7 +179,7 @@ func (fs *FileScanner) scanFromOffset(ctx context.Context, path string, f format
 			if err == io.EOF {
 				break
 			}
-			logScanError(fs.errOut, path, err)
+			fs.diagnostics.Error(fmt.Sprintf("Error reading file %s: %v", path, err), nil)
 			return
 		}
 	}
@@ -193,7 +194,7 @@ func (fs *FileScanner) ListSources(ctx context.Context) ([]string, error) {
 		Recursive: cfg.Recursive,
 		Services:  cfg.Services,
 		OnError: func(path string, err error) {
-			logScanError(fs.errOut, path, err)
+			fs.diagnostics.Error(fmt.Sprintf("Error listing file %s: %v", path, err), nil)
 		},
 	})
 	if err != nil {

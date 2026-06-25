@@ -179,6 +179,14 @@ func registerFlags(cfg *config.Config) *flagOptions {
 		"display only selected fields (comma-separated, e.g. request_id,path,status)",
 	)
 
+	boolFlag(
+		&cfg.Verbose,
+		"verbose",
+		"V",
+		false,
+		"show warnings and errors encountered during scanning",
+	)
+
 	return opts
 }
 

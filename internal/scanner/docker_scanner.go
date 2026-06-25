@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
 	"github.com/sagarmaheshwary/reqlog/internal/docker"
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
 	"github.com/sagarmaheshwary/reqlog/internal/formatter"
@@ -18,28 +19,28 @@ type DockerScanner struct {
 	lineProcessor *LineProcessor
 	dockerClient  docker.DockerClient
 	out           io.Writer
-	errOut        io.Writer
 	now           time.Time
 	host          string
+	diagnostics   *diagnostics.Diagnostics
 }
 
 type DockerScannerOpts struct {
 	LineProcessor *LineProcessor
-	dockerClient  docker.DockerClient
+	DockerClient  docker.DockerClient
 	Out           io.Writer
-	ErrOut        io.Writer
 	Now           time.Time
 	Host          string
+	Diagnostics   *diagnostics.Diagnostics
 }
 
 func NewDockerScanner(opts *DockerScannerOpts) *DockerScanner {
 	return &DockerScanner{
 		lineProcessor: opts.LineProcessor,
-		dockerClient:  opts.dockerClient,
+		dockerClient:  opts.DockerClient,
 		out:           opts.Out,
-		errOut:        opts.ErrOut,
 		now:           opts.Now,
 		host:          opts.Host,
+		diagnostics:   opts.Diagnostics,
 	}
 }
 
@@ -54,7 +55,7 @@ func (ds *DockerScanner) Scan(ctx context.Context, containers []string) ([]domai
 	for _, container := range containers {
 		reader, err := ds.dockerClient.Logs(container, false, cfg.Since)
 		if err != nil {
-			logScanError(ds.errOut, container, err)
+			ds.diagnostics.Error(fmt.Sprintf("Error fetching logs for container %s: %v", container, err), nil)
 			continue
 		}
 
@@ -85,7 +86,7 @@ func (ds *DockerScanner) Scan(ctx context.Context, containers []string) ([]domai
 					if err == io.EOF {
 						break
 					}
-					logScanError(ds.errOut, container, err)
+					ds.diagnostics.Error(fmt.Sprintf("Error reading logs for container %s: %v", container, err), nil)
 					return
 				}
 			}
@@ -105,7 +106,7 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 
 			reader, err := ds.dockerClient.Logs(container, true, "")
 			if err != nil {
-				logScanError(ds.errOut, container, err)
+				ds.diagnostics.Error(fmt.Sprintf("Error fetching logs for container %s: %v", container, err), nil)
 				return
 			}
 			defer reader.Close()
@@ -125,7 +126,7 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 					if err == io.EOF {
 						break
 					}
-					logScanError(ds.errOut, container, err)
+					ds.diagnostics.Error(fmt.Sprintf("Error reading logs for container %s: %v", container, err), nil)
 					return
 				}
 			}

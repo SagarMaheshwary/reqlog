@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
+	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
 	"github.com/sagarmaheshwary/reqlog/internal/transport"
 )
 
@@ -91,9 +92,9 @@ func BenchmarkScanDir_PlainText(b *testing.B) {
 			LineProcessor:  lp,
 			FollowInterval: time.Second,
 			Out:            os.Stdout,
-			ErrOut:         os.Stderr,
 			Now:            time.Now(),
 			LogFileReader:  transport.NewLogFileReader(nil),
+			Diagnostics:    diagnostics.NewDiagnostics(),
 		})
 		files, err := fs.ListSources(b.Context())
 		if err != nil {
@@ -131,9 +132,9 @@ func BenchmarkScanDir_JSON(b *testing.B) {
 			LineProcessor:  lp,
 			FollowInterval: time.Second,
 			Out:            os.Stdout,
-			ErrOut:         os.Stderr,
 			Now:            time.Now(),
 			LogFileReader:  transport.NewLogFileReader(nil),
+			Diagnostics:    diagnostics.NewDiagnostics(),
 		})
 		files, err := fs.ListSources(b.Context())
 		if err != nil {
