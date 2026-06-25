@@ -71,6 +71,9 @@ Flags:
         output format ("pretty" or "json")
         (default "pretty")
 
+  -V, --verbose
+        show warnings and errors encountered during scanning
+
   -F, --format string
         log parsing format ("auto", "json", or "text")
         (default "auto")

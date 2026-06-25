@@ -163,6 +163,66 @@ func TestFileScanner_Scan_IgnoreCase(t *testing.T) {
 	}
 }
 
+func TestFileScanner_Scan_Recursive(t *testing.T) {
+	dir := t.TempDir()
+
+	subDir := filepath.Join(dir, "services")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	logContent := `2024-03-10T12:00:00Z user=abc status=ok`
+	writeFile(
+		t,
+		filepath.Join(subDir, "auth.log"),
+		[]byte(logContent),
+	)
+
+	cfg := &Config{
+		Dir:         dir,
+		SearchValue: "abc",
+		Keys:        []string{"user"},
+		Recursive:   true,
+	}
+
+	lp := NewLineProcessor(cfg, NewTimeParser())
+
+	fs := NewFileScanner(&FileScannerOpts{
+		LineProcessor:  lp,
+		FollowInterval: time.Second,
+		Out:            io.Discard,
+		Now:            time.Now(),
+		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
+	})
+
+	files, err := fs.ListSources(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d (%v)", len(files), files)
+	}
+
+	if files[0] != filepath.Join(subDir, "auth.log") {
+		t.Fatalf("unexpected file: %v", files[0])
+	}
+
+	results, err := fs.Scan(t.Context(), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	if results[0].Service != "auth" {
+		t.Fatalf("expected service auth, got %q", results[0].Service)
+	}
+}
+
 func TestFileScanner_Scan_IgnoresNonLogFiles(t *testing.T) {
 	dir := t.TempDir()
 
