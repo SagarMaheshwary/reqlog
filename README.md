@@ -209,6 +209,12 @@ reqlog -k request_id abc123
 reqlog -k event_key order.created
 ```
 
+**Live Log Streaming**
+
+```bash
+reqlog -f abc123
+```
+
 **Docker Logs**
 
 ```bash
@@ -340,10 +346,12 @@ Output structure:
 }
 ```
 
-**Live Log Streaming**
+**Field Selection**
+
+Display only the fields relevant to your investigation:
 
 ```bash
-reqlog -f abc123
+reqlog --fields request_id,path,status abc123
 ```
 
 > Full usage guide: [docs/usage.md](./docs/usage.md)
@@ -402,10 +410,6 @@ Future updates will mainly focus on:
 - Output and usability improvements
 - Performance tuning over time
 - Additional features based on real-world usage and feedback
-
-### Planned
-
-- [ ] `--fields` flag for selecting specific fields from JSON logs ([#14](https://github.com/SagarMaheshwary/reqlog/issues/14))
 
 ## Support & Contributions
 
