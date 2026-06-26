@@ -28,22 +28,27 @@ Use `--key` (`-k`) to override the default search key.
 
 ## Flags
 
-| Flag            | Shorthand | Description                                 |
-| --------------- | --------- | ------------------------------------------- |
-| `--dir`         | `-d`      | Directory containing log files              |
-| `--key`         | `-k`      | Field key to match                          |
-| `--service`     | `-s`      | Filter by service/container name            |
-| `--source`      | `-S`      | Log source backend (`file` or `docker`)     |
-| `--format`      | `-F`      | Log parsing format (`auto`, `json`, `text`) |
-| `--output`      | `-o`      | Output format (`pretty` or `json`)          |
-| `--limit`       | `-n`      | Limit number of matches                     |
-| `--latest`      | `-l`      | Return globally latest matches              |
-| `--follow`      | `-f`      | Follow logs in real time                    |
-| `--context`     | `-c`      | Show surrounding log lines                  |
-| `--since`       | `-t`      | Filter logs newer than timestamp/duration   |
-| `--ignore-case` | `-i`      | Case-insensitive search                     |
-| `--recursive`   | `-r`      | Scan directories recursively                |
-| `--version`     | `-v`      | Print version information                   |
+| Flag            | Shorthand | Default                                    | Description                                                            |
+| --------------- | --------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| `--dir`         | `-d`      | `./logs`                                   | Directory containing log files                                         |
+| `--recursive`   | `-r`      | `false`                                    | Scan directories recursively                                           |
+| `--source`      | `-S`      | `file`                                     | Log source backend (`file` or `docker`)                                |
+| `--host`        | `-H`      | -                                          | SSH host alias from config file                                        |
+| `--config`      | -         | OS dependent, check below for more details | Path to SSH config file                                                |
+| `--key`         | `-k`      | auto                                       | Field key to match                                                     |
+| `--service`     | `-s`      | -                                          | Filter by service/container name                                       |
+| `--since`       | `-t`      | -                                          | Filter logs newer than timestamp/duration                              |
+| `--ignore-case` | `-i`      | `false`                                    | Case-insensitive search                                                |
+| `--limit`       | `-n`      | `0`                                        | Limit number of matches                                                |
+| `--latest`      | `-l`      | `false`                                    | Return the latest N matches across all sources                         |
+| `--context`     | `-c`      | `0`                                        | Show surrounding log lines                                             |
+| `--fields`      | -         | -                                          | Display selected fields (comma-separated, e.g. request_id,path,status) |
+| `--output`      | `-o`      | `pretty`                                   | Output format (`pretty` or `json`)                                     |
+| `--format`      | `-F`      | `auto`                                     | Log parsing format (`auto`, `json`, `text`)                            |
+| `--follow`      | `-f`      | `false`                                    | Follow logs in real time                                               |
+| `--verbose`     | `-V`      | `false`                                    | Show warnings and errors encountered during scanning                   |
+| `--version`     | `-v`      | -                                          | Print version information                                              |
+| `--help`        | `-h`      | -                                          | Show help message                                                      |
 
 ## Common Workflows
 
@@ -88,8 +93,6 @@ Available formats:
 - `auto` (default)
 - `json`
 - `text`
-
-> `--json` has been replaced with `--format=json`.
 
 ### Docker Logs
 
@@ -201,12 +204,12 @@ reqlog -i -k event_key ORDER.CREATED
 reqlog -f abc123
 ```
 
-### Non-Recursive Scan
+### Recursive Scan
 
-Disable recursive directory scanning:
+Recursively scan a directory for logs:
 
 ```bash
-reqlog --recursive=false abc123
+reqlog -r abc123
 ```
 
 ## Remote Logs Over SSH
@@ -271,6 +274,27 @@ Specify a custom config file:
 reqlog --config ./config.yaml -H srv1 abc123
 ```
 
+## Verbose Diagnostics
+
+By default, reqlog suppresses warnings and errors encountered during scanning (for example, unreachable SSH hosts, permission errors, or unavailable Docker containers).
+
+Use `-V` / `--verbose` to display diagnostics after the search results:
+
+```bash
+reqlog -V abc123
+reqlog -H srv1,srv2 -V abc123
+```
+
+Example output:
+
+```text
+2026-06-26T12:27:43.755Z [reqlog] | ERROR Error opening file logs/api.log: open logs/api.log: permission denied
+```
+
+Diagnostics use the service name `reqlog` to distinguish them from log entries returned by searched files, containers, or remote hosts.
+
+When possible, reqlog continues searching other sources and reports failures as diagnostics instead of aborting the search.
+
 ## JSON Output
 
 Structured output for piping and integrations:
@@ -289,6 +313,72 @@ Example output:
   "message": "request started",
   "level": "info",
   "request_id": "abc123"
+}
+```
+
+## Field Selection
+
+Use `--fields` to display only selected structured log fields, making it easier to focus on the information relevant to debugging or tracing.
+
+```bash
+reqlog --fields request_id,path,status abc123
+```
+
+Multiple fields can be specified as a comma-separated list. The output preserves the order provided.
+
+### Pretty Output
+
+In pretty output, `--fields` filters only structured log fields.
+
+Core timeline fields remain visible:
+
+- timestamp
+- service
+- message
+- level
+- host (when present)
+- context indicator (when enabled)
+
+Example:
+
+```bash
+reqlog --fields request_id,path abc123
+```
+
+```text
+2026-04-28T10:00:01.100Z [api-gateway] | INFO Request received request_id=req-1001 path=/login
+```
+
+### JSON Output
+
+In JSON output, `--fields` can filter any available output field, including reqlog-generated fields such as `timestamp`, `service`, and `message`.
+
+Example:
+
+```bash
+reqlog -o json --fields timestamp,message,request_id abc123
+```
+
+```json
+{
+  "timestamp": "2026-04-28T10:00:01.100Z",
+  "message": "Request received",
+  "request_id": "req-1001"
+}
+```
+
+If a log field has the same name as a reqlog-generated field, the original log field is available using the `fields.` prefix.
+
+Example:
+
+```bash
+reqlog -o json --fields service,fields.service
+```
+
+```json
+{
+  "service": "api-gateway",
+  "fields.service": "payments"
 }
 ```
 
