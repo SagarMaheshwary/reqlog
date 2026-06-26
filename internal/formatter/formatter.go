@@ -34,8 +34,9 @@ type Opts struct {
 func NewFormatter(opts *Opts) *Formatter {
 	max := 0
 	for _, e := range opts.Entries {
-		if len(e.Service) > max {
-			max = len(e.Service)
+		label := displayName(e)
+		if len(label) > max {
+			max = len(label)
 		}
 	}
 
@@ -49,11 +50,11 @@ func NewFormatter(opts *Opts) *Formatter {
 	}
 }
 
-func (f *Formatter) padAfter(service string) string {
-	if len(service) >= f.serviceWidth {
+func (f *Formatter) padAfter(label string) string {
+	if len(label) >= f.serviceWidth {
 		return ""
 	}
-	return strings.Repeat(" ", f.serviceWidth-len(service))
+	return strings.Repeat(" ", f.serviceWidth-len(label))
 }
 
 func (f *Formatter) Format(entry domain.LogEntry) string {
@@ -145,15 +146,10 @@ func (f *Formatter) outputJSONFields(
 
 func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 	serviceColor := f.colorizer.Color(entry.Service)
-	padding := f.padAfter(entry.Service)
+	label := displayName(entry)
+	padding := f.padAfter(label)
 
 	msg := f.renderPrettyMessage(entry)
-
-	service := entry.Service
-
-	if entry.Host != "" {
-		service = entry.Host + ":" + entry.Service
-	}
 
 	return fmt.Sprintf(
 		"%s%s%s%s %s[%s]%s%s | %s%s%s",
@@ -163,7 +159,7 @@ func (f *Formatter) outputPretty(entry domain.LogEntry) string {
 		reset,
 
 		serviceColor,
-		service,
+		label,
 		reset,
 		padding,
 
@@ -326,4 +322,11 @@ func marshal(out any, entry domain.LogEntry) string {
 
 	fallback, _ := json.Marshal(errorOut)
 	return string(fallback)
+}
+
+func displayName(entry domain.LogEntry) string {
+	if entry.Host != "" {
+		return entry.Host + ":" + entry.Service
+	}
+	return entry.Service
 }

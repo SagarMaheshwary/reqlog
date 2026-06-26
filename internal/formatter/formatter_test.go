@@ -674,6 +674,40 @@ func TestFormatter_RenderPrettyFields(t *testing.T) {
 	}
 }
 
+func TestDisplayName(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry domain.LogEntry
+		want  string
+	}{
+		{
+			name: "service only",
+			entry: domain.LogEntry{
+				Service: "api",
+			},
+			want: "api",
+		},
+		{
+			name: "host and service",
+			entry: domain.LogEntry{
+				Host:    "prod-1",
+				Service: "api",
+			},
+			want: "prod-1:api",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := displayName(tt.entry)
+
+			if got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
 func assertContains(t *testing.T, got, want string) {
 	t.Helper()
 

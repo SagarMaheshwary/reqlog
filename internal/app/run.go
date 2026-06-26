@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/sagarmaheshwary/reqlog/internal/config"
 	"github.com/sagarmaheshwary/reqlog/internal/diagnostics"
@@ -121,7 +123,11 @@ func resolveSource(
 	return sources, nil
 }
 
-func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor, dg *diagnostics.Diagnostics) ([]scannerSource, error) {
+func scannersForConfig(
+	cfg *config.Config,
+	lp *scanner.LineProcessor,
+	dg *diagnostics.Diagnostics,
+) ([]scannerSource, error) {
 	if cfg.Host == "" {
 		scn, err := scanner.New(&scanner.FactoryOpts{
 			Source:        cfg.Source,
@@ -140,35 +146,61 @@ func scannersForConfig(cfg *config.Config, lp *scanner.LineProcessor, dg *diagno
 	hosts := strings.Split(cfg.Host, ",")
 	scanners := make([]scannerSource, 0, len(hosts))
 
+	var (
+		wg sync.WaitGroup
+		mu sync.Mutex
+	)
+
 	for _, host := range hosts {
 		h, ok := cfg.Config.Hosts[host]
 		if !ok {
-			return nil, fmt.Errorf("invalid value passed to --host: %s", host)
+			keys := make([]string, 0, len(cfg.Config.Hosts))
+			for k := range cfg.Config.Hosts {
+				keys = append(keys, k)
+			}
+
+			return nil, fmt.Errorf("invalid value passed to --host: %s, available hosts are %v", host, keys)
 		}
 
-		sshClient, err := transport.NewSSHClient(h, ssh.Dial)
-		if err != nil {
-			return nil, err
-		}
+		wg.Add(1)
 
-		executor := transport.NewExecutor(sshClient)
-		scn, err := scanner.New(&scanner.FactoryOpts{
-			Source:        cfg.Source,
-			LineProcessor: lp,
-			Executor:      executor,
-			LogFileReader: transport.NewLogFileReader(executor),
-			Host:          host,
-			Diagnostics:   dg,
-		})
-		if err != nil {
-			return nil, err
-		}
+		go func(host string, h config.Host) {
+			defer wg.Done()
 
-		scanners = append(scanners, scannerSource{
-			scanner:   scn,
-			sshClient: sshClient,
-			sources:   make([]string, 0),
-		})
+			sshClient, err := transport.NewSSHClient(h, ssh.Dial)
+			if err != nil {
+				dg.Error(fmt.Sprintf("Error creating SSH client for host %s: %v", host, err), nil)
+				return
+			}
+
+			executor := transport.NewExecutor(sshClient)
+			scn, err := scanner.New(&scanner.FactoryOpts{
+				Source:        cfg.Source,
+				LineProcessor: lp,
+				Executor:      executor,
+				LogFileReader: transport.NewLogFileReader(executor),
+				Host:          host,
+				Diagnostics:   dg,
+			})
+			if err != nil {
+				sshClient.Close()
+				dg.Error(fmt.Sprintf("Error creating scanner for host %s: %v", host, err), nil)
+				return
+			}
+			mu.Lock()
+			scanners = append(scanners, scannerSource{
+				scanner:   scn,
+				sshClient: sshClient,
+				sources:   make([]string, 0),
+			})
+			mu.Unlock()
+		}(host, h)
+	}
+
+	wg.Wait()
+
+	if len(scanners) == 0 {
+		return nil, errors.New("failed to connect to any configured host")
 	}
 
 	return scanners, nil
