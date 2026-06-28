@@ -136,7 +136,7 @@ You can also install manually from the latest release:
 
 ```bash
 tar -xzf reqlog-linux-amd64.tar.gz
-sudo mv reqlog /usr/local/bin/
+sudo mv reqlog-linux-amd64 /usr/local/bin/reqlog
 ```
 
 ### Windows
