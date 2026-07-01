@@ -6,7 +6,9 @@
 - [Flags](#flags)
 - [Common Workflows](#common-workflows)
 - [Remote Logs Over SSH](#remote-logs-over-ssh)
+- [Verbose Diagnostics](#verbose-diagnostics)
 - [JSON Output](#json-output)
+- [Field Selection](#field-selection)
 - [Supported Log Formats](#supported-log-formats)
 - [Supported Timestamp Formats](#supported-timestamp-formats)
 - [Tips](#tips)
@@ -218,7 +220,8 @@ Search logs across remote hosts using SSH by defining hosts in `config.yaml`.
 
 Place `config.yaml` in one of the following locations:
 
-- macOS/Linux: `~/.config/reqlog/config.yaml`
+- Linux: `~/.config/reqlog/config.yaml`
+- macOS: `~/Library/Application Support/reqlog/config.yaml`
 - Windows: `%APPDATA%\reqlog\config.yaml`
 
 **Example `config.yaml`**
