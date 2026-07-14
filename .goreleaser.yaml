@@ -89,6 +89,10 @@ brews:
 
     directory: Formula
 
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+
     homepage: https://github.com/sagarmaheshwary/reqlog
 
     description: Search, trace, and stream logs across files, Docker containers, and remote hosts
@@ -108,6 +112,12 @@ scoops:
       owner: sagarmaheshwary
       name: scoop-bucket
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+    directory: bucket
+
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
 
     homepage: https://github.com/sagarmaheshwary/reqlog
 
