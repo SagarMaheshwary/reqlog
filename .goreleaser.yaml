@@ -1,0 +1,126 @@
+version: 2
+
+project_name: reqlog
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: reqlog
+    main: ./cmd/reqlog
+    binary: reqlog
+
+    env:
+      - CGO_ENABLED=0
+
+    goos:
+      - linux
+      - windows
+      - darwin
+
+    goarch:
+      - amd64
+      - arm64
+
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: archives
+
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+    files:
+      - LICENSE
+      - README.md
+
+    formats:
+      - tar.gz
+
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  prerelease: auto
+
+nfpms:
+  - id: packages
+
+    package_name: reqlog
+
+    homepage: https://github.com/sagarmaheshwary/reqlog
+
+    maintainer: Sagar Maheshwary <sagarmaheshwary31@gmail.com>
+
+    description: |
+      Search, trace, and stream logs across files, Docker containers, and remote hosts.
+
+    license: MIT
+
+    formats:
+      - deb
+      - rpm
+
+    bindir: /usr/bin
+
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/reqlog/LICENSE
+
+      - src: README.md
+        dst: /usr/share/doc/reqlog/README.md
+
+brews:
+  - name: reqlog
+
+    repository:
+      owner: sagarmaheshwary
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+    directory: Formula
+
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+
+    homepage: https://github.com/sagarmaheshwary/reqlog
+
+    description: Search, trace, and stream logs across files, Docker containers, and remote hosts
+
+    license: MIT
+
+    install: |
+      bin.install "reqlog"
+
+    test: |
+      system "#{bin}/reqlog", "--version"
+
+scoops:
+  - name: reqlog
+
+    repository:
+      owner: sagarmaheshwary
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+    directory: bucket
+
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+
+    homepage: https://github.com/sagarmaheshwary/reqlog
+
+    description: Search, trace, and stream logs across files, Docker containers, and remote hosts
+
+    license: MIT

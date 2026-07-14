@@ -10,100 +10,21 @@ permissions:
 
 jobs:
   release:
-    name: Build and Release
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Build binaries
-        env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
-        run: |
-          # Linux
-          GOOS=linux  GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-linux-amd64  ./cmd/reqlog
-          GOOS=linux  GOARCH=arm64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-linux-arm64  ./cmd/reqlog
-          # Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-windows-amd64.exe ./cmd/reqlog
-          # macOS
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-darwin-amd64 ./cmd/reqlog
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-X main.version=${VERSION}" -o reqlog-darwin-arm64 ./cmd/reqlog
-
-      - name: Verify version
-        run: ./reqlog-linux-amd64 --version
-
-      - name: Archive binaries
-        env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
-        run: |
-          mkdir -p dist
-
-          package_tar() {
-            local binary="$1"
-            local archive="$2"
-
-            rm -rf pkg
-            mkdir pkg
-
-            cp "$binary" pkg/reqlog
-            cp LICENSE README.md pkg/
-
-            tar -czf "$archive" -C pkg .
-
-            rm -rf pkg
-          }
-
-          package_zip() {
-            local binary="$1"
-            local archive="$2"
-
-            rm -rf pkg
-            mkdir pkg
-
-            cp "$binary" pkg/reqlog.exe
-            cp LICENSE README.md pkg/
-
-            (
-              cd pkg
-              zip -q "../$archive" *
-            )
-
-            rm -rf pkg
-          }
-
-          package_tar reqlog-linux-amd64 \
-            dist/reqlog_${VERSION}_linux_amd64.tar.gz
-
-          package_tar reqlog-linux-arm64 \
-            dist/reqlog_${VERSION}_linux_arm64.tar.gz
-
-          package_tar reqlog-darwin-amd64 \
-            dist/reqlog_${VERSION}_darwin_amd64.tar.gz
-
-          package_tar reqlog-darwin-arm64 \
-            dist/reqlog_${VERSION}_darwin_arm64.tar.gz
-
-          package_zip reqlog-windows-amd64.exe \
-            dist/reqlog_${VERSION}_windows_amd64.zip
-
-      - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum * > checksums.txt
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: goreleaser/goreleaser-action@v6
         with:
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
-          files: dist/*
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
