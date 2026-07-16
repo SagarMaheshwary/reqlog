@@ -106,54 +106,61 @@ Example output:
 
 ## Installation
 
-reqlog is a single binary with no runtime dependencies.
+reqlog is a single statically linked binary with no runtime dependencies.
 
-### Go Install
+Supported Architectures
+
+- `amd64`
+- `arm64`
+
+**Homebrew (macOS)**
+
+```bash
+brew install sagarmaheshwary/tap/reqlog
+```
+
+**Scoop (Windows)**
+
+```powershell
+scoop bucket add sagarmaheshwary https://github.com/sagarmaheshwary/scoop-bucket
+scoop install reqlog
+```
+
+**Debian / Ubuntu (.deb)**
+
+Download the appropriate package from the latest [release](https://github.com/SagarMaheshwary/reqlog/releases/latest) and install:
+
+```bash
+sudo apt install ./reqlog_<version>_linux_amd64.deb # or ./reqlog_<version>_linux_arm64.deb
+```
+
+**Fedora / RHEL / Rocky Linux / openSUSE (.rpm)**
+
+Download the appropriate package from the latest [release](https://github.com/SagarMaheshwary/reqlog/releases/latest) and install:
+
+```bash
+sudo rpm -Uvh reqlog_<version>_linux_amd64.rpm # or reqlog_<version>_linux_arm64.rpm
+```
+
+**Manual Installation (Linux)**
+
+Download the appropriate archive from the latest [release](https://github.com/SagarMaheshwary/reqlog/releases/latest) and install:
+
+```bash
+tar -xzf reqlog_<version>_linux_amd64.tar.gz # or reqlog_<version>_linux_arm64.tar.gz
+sudo mv reqlog /usr/local/bin/
+```
+
+**Go Install**
 
 ```bash
 go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
 ```
 
-### macOS / Linux (Quick Install)
+**Verify Installation**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
-```
-
-This script:
-
-- Detects OS and architecture automatically
-- Downloads the latest release
-- Installs `reqlog` to `/usr/local/bin`
-
-### Manual Installation (Linux / macOS)
-
-You can also install manually from the latest release:
-
-1. Download the appropriate binary from:
-   [https://github.com/sagarmaheshwary/reqlog/releases](https://github.com/sagarmaheshwary/reqlog/releases)
-2. Extract and install:
-
-```bash
-tar -xzf reqlog-linux-amd64.tar.gz
-sudo mv reqlog-linux-amd64 /usr/local/bin/reqlog
-```
-
-### Windows
-
-Download the latest release from:
-
-[https://github.com/sagarmaheshwary/reqlog/releases](https://github.com/sagarmaheshwary/reqlog/releases)
-
-Then:
-
-- Extract the archive
-- Add the binary to your `PATH`
-
-### Verify installation
-
-```bash
-reqlog -v
+reqlog --version
 ```
 
 ## Requirements
