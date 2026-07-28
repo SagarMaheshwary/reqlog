@@ -113,53 +113,36 @@ Supported Architectures
 - `amd64`
 - `arm64`
 
-**Homebrew (macOS)**
+**Go Install**
 
-```bash
+```text
+go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
+```
+
+**macOS**
+
+```text
 brew install sagarmaheshwary/tap/reqlog
 ```
 
-**Scoop (Windows)**
+**Windows**
 
-```powershell
+```text
 scoop bucket add sagarmaheshwary https://github.com/sagarmaheshwary/scoop-bucket
 scoop install reqlog
 ```
 
-**Debian / Ubuntu (.deb)**
+**Linux packages**
 
-Download the appropriate package from the latest [release](https://github.com/SagarMaheshwary/reqlog/releases/latest) and install:
+Download the appropriate package for your distribution from the latest [release](https://github.com/sagarmaheshwary/reqlog/releases/latest):
 
-```bash
-sudo apt install ./reqlog_<version>_linux_amd64.deb # or ./reqlog_<version>_linux_arm64.deb
-```
-
-**Fedora / RHEL / Rocky Linux / openSUSE (.rpm)**
-
-Download the appropriate package from the latest [release](https://github.com/SagarMaheshwary/reqlog/releases/latest) and install:
-
-```bash
-sudo rpm -Uvh reqlog_<version>_linux_amd64.rpm # or reqlog_<version>_linux_arm64.rpm
-```
-
-**Manual Installation (Linux)**
-
-Download the appropriate archive from the latest [release](https://github.com/SagarMaheshwary/reqlog/releases/latest) and install:
-
-```bash
-tar -xzf reqlog_<version>_linux_amd64.tar.gz # or reqlog_<version>_linux_arm64.tar.gz
-sudo mv reqlog /usr/local/bin/
-```
-
-**Go Install**
-
-```bash
-go install github.com/sagarmaheshwary/reqlog/cmd/reqlog@latest
-```
+- `.deb` (Debian/Ubuntu)
+- `.rpm` (Fedora/RHEL/Rocky Linux/openSUSE)
+- `.tar.gz` (manual installation)
 
 **Verify Installation**
 
-```bash
+```text
 reqlog --version
 ```
 
