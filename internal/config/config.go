@@ -47,6 +47,12 @@ type Config struct {
 	Config *SSH
 }
 
+// LiveOnly reports whether reqlog should stream every newly appended log line
+// instead of searching: --follow is set and no search value was provided.
+func (c *Config) LiveOnly() bool {
+	return c.Follow && c.SearchValue == ""
+}
+
 var DefaultKeys = []string{
 	"request_id",
 	"req_id",

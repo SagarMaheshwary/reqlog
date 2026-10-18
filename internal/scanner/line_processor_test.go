@@ -1015,3 +1015,75 @@ func TestIsJSONLine(t *testing.T) {
 		})
 	}
 }
+
+func TestLineProcessor_ProcessLine_MatchAll(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		format   config.LogFormat
+		expectOK bool
+		message  string
+	}{
+		{
+			name:     "text line without search keys",
+			line:     "2024-03-10T12:00:00Z request arrived status=ok",
+			format:   config.FormatText,
+			expectOK: true,
+			message:  "request arrived",
+		},
+		{
+			name:     "json line without search keys",
+			line:     `{"time":"2024-03-10T12:00:00Z","msg":"request arrived","status":"ok"}`,
+			format:   config.FormatJSON,
+			expectOK: true,
+			message:  "request arrived",
+		},
+		{
+			name:     "auto format detects json",
+			line:     `{"time":"2024-03-10T12:00:00Z","msg":"request arrived"}`,
+			format:   config.FormatAuto,
+			expectOK: true,
+			message:  "request arrived",
+		},
+		{
+			name:     "text line with invalid timestamp is skipped",
+			line:     "invalid request arrived",
+			format:   config.FormatText,
+			expectOK: false,
+		},
+		{
+			name:     "invalid json is skipped",
+			line:     `{"time":`,
+			format:   config.FormatJSON,
+			expectOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lp := NewLineProcessor(&Config{
+				MatchAll: true,
+				Keys:     []string{"request_id"},
+				Format:   tt.format,
+			}, NewTimeParser())
+
+			entry, ok := lp.ProcessLine(tt.line, "svc", "srv1")
+
+			if ok != tt.expectOK {
+				t.Fatalf("expected ok=%v, got %v", tt.expectOK, ok)
+			}
+
+			if !ok {
+				return
+			}
+
+			if entry.Service != "svc" || entry.Host != "srv1" {
+				t.Fatalf("expected service=svc host=srv1, got service=%s host=%s", entry.Service, entry.Host)
+			}
+
+			if entry.Message != tt.message {
+				t.Fatalf("expected message %q, got %q", tt.message, entry.Message)
+			}
+		})
+	}
+}

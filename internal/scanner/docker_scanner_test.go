@@ -558,6 +558,142 @@ func TestDockerScanner_Follow(t *testing.T) {
 	}
 }
 
+func TestDockerScanner_SeekToEnd(t *testing.T) {
+	client := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			t.Fatalf("expected no logs request, got one for %s", container)
+			return nil, nil
+		},
+	}
+
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: NewLineProcessor(&Config{MatchAll: true}, NewTimeParser()),
+		DockerClient:  client,
+		Out:           io.Discard,
+		Now:           time.Now(),
+		Diagnostics:   diagnostics.NewDiagnostics(),
+	})
+
+	followable, err := ds.SeekToEnd(t.Context(), []string{"auth", "db"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !reflect.DeepEqual(followable, []string{"auth", "db"}) {
+		t.Fatalf("expected followable %v, got %v", []string{"auth", "db"}, followable)
+	}
+
+	if got := ds.ServiceName("order.service"); got != "order.service" {
+		t.Fatalf("expected service name %q, got %q", "order.service", got)
+	}
+}
+
+func TestDockerScanner_Follow_MatchAll(t *testing.T) {
+	var gotFollow bool
+
+	client := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			gotFollow = follow
+			return io.NopCloser(strings.NewReader(
+				"2024-03-10T12:00:00Z user=123 status=ok\n" +
+					"2024-03-10T12:00:01Z request arrived\n" +
+					"not a log line\n",
+			)), nil
+		},
+	}
+
+	var out bytes.Buffer
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: NewLineProcessor(&Config{MatchAll: true, Keys: []string{"user"}}, NewTimeParser()),
+		DockerClient:  client,
+		Out:           &out,
+		Now:           time.Now(),
+		Diagnostics:   diagnostics.NewDiagnostics(),
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+
+	ds.Follow(ctx, []string{"auth"}, &testFormatter{})
+
+	if !gotFollow {
+		t.Fatal("expected logs to be requested in follow mode")
+	}
+
+	lines := strings.FieldsFunc(out.String(), func(r rune) bool { return r == '\n' || r == '\r' })
+
+	want := []string{
+		"2024-03-10T12:00:00Z [auth]  status=ok user=123",
+		"2024-03-10T12:00:01Z [auth] request arrived ",
+	}
+
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("expected %q, got %q", want, lines)
+	}
+}
+
+func TestDockerScanner_Follow_SerializesOutputAcrossContainers(t *testing.T) {
+	const linesPerContainer = 20
+
+	containers := []string{"auth", "db", "cache", "queue", "search"}
+
+	client := &mockDockerClient{
+		logsFn: func(container string, follow bool, since string) (io.ReadCloser, error) {
+			lines := make([]string, 0, linesPerContainer)
+			for i := range linesPerContainer {
+				lines = append(lines, fmt.Sprintf("2024-03-10T12:00:00Z line=%d user=123", i))
+			}
+			return dockerLogs(lines), nil
+		},
+	}
+
+	out := &overlapDetectingWriter{}
+	ds := NewDockerScanner(&DockerScannerOpts{
+		LineProcessor: NewLineProcessor(&Config{SearchValue: "123", Keys: []string{"user"}}, NewTimeParser()),
+		DockerClient:  client,
+		Out:           out,
+		Now:           time.Now(),
+		Diagnostics:   diagnostics.NewDiagnostics(),
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	ds.Follow(ctx, containers, &testFormatter{})
+
+	if out.overlapped.Load() {
+		t.Fatal("expected writes to output to be serialized, got concurrent writes")
+	}
+
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+
+	if len(lines) != len(containers)*linesPerContainer {
+		t.Fatalf("expected %d lines, got %d", len(containers)*linesPerContainer, len(lines))
+	}
+
+	perContainer := map[string]int{}
+	for _, line := range lines {
+		matched := false
+		for _, c := range containers {
+			if strings.HasPrefix(line, "2024-03-10T12:00:00Z ["+c+"]  line=") && strings.HasSuffix(line, " user=123") {
+				perContainer[c]++
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			t.Fatalf("unexpected or interleaved line: %q", line)
+		}
+	}
+
+	for _, c := range containers {
+		if perContainer[c] != linesPerContainer {
+			t.Errorf("%s: expected %d lines, got %d", c, linesPerContainer, perContainer[c])
+		}
+	}
+}
+
 func TestDockerScanner_Scan_LogsErrorCreatesDiagnostic(t *testing.T) {
 	cfg := &Config{
 		SearchValue: "123",

@@ -22,6 +22,10 @@ type DockerScanner struct {
 	now           time.Time
 	host          string
 	diagnostics   *diagnostics.Diagnostics
+
+	// outMu serializes writes to out, which Follow performs from one
+	// goroutine per container.
+	outMu sync.Mutex
 }
 
 type DockerScannerOpts struct {
@@ -118,7 +122,7 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 				if len(line) > 0 {
 					entry, ok := ds.lineProcessor.ProcessLine(line, container, ds.host)
 					if ok {
-						fmt.Fprintln(ds.out, f.Format(*entry))
+						ds.writeLine(f.Format(*entry))
 					}
 				}
 
@@ -143,6 +147,23 @@ func (ds *DockerScanner) Follow(ctx context.Context, containers []string, f form
 	case <-ctx.Done():
 	case <-done:
 	}
+}
+
+func (ds *DockerScanner) writeLine(line string) {
+	ds.outMu.Lock()
+	defer ds.outMu.Unlock()
+
+	fmt.Fprintln(ds.out, line)
+}
+
+// SeekToEnd is a no-op: Follow already requests logs with --tail 0, so only
+// new lines are streamed.
+func (ds *DockerScanner) SeekToEnd(ctx context.Context, containers []string) ([]string, error) {
+	return containers, nil
+}
+
+func (ds *DockerScanner) ServiceName(container string) string {
+	return container
 }
 
 func (ds *DockerScanner) ListSources(ctx context.Context) ([]string, error) {

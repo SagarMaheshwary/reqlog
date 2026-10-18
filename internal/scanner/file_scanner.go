@@ -68,7 +68,7 @@ func (fs *FileScanner) Scan(ctx context.Context, files []string) ([]domain.LogEn
 			defer file.Close()
 			collector.StartSource()
 
-			service := strings.TrimSuffix(filepath.Base(path), ".log")
+			service := fs.ServiceName(path)
 			reader := bufio.NewReader(file)
 			engine := NewContextEngine(fs.lineProcessor, collector, cfg.Context)
 
@@ -131,8 +131,32 @@ func (fs *FileScanner) Follow(ctx context.Context, files []string, f formatter.L
 	}
 }
 
+// SeekToEnd records the current size of each file as its follow offset.
+// Files whose size can't be read are skipped (and reported as diagnostics),
+// since following them from offset 0 would replay existing content.
+func (fs *FileScanner) SeekToEnd(ctx context.Context, files []string) ([]string, error) {
+	seeked := make([]string, 0, len(files))
+
+	for _, path := range files {
+		size, err := fs.logFileReader.Size(ctx, path)
+		if err != nil {
+			fs.diagnostics.Error(fmt.Sprintf("Error reading file %s: %v", path, err), nil)
+			continue
+		}
+
+		fs.offsets[path] = size
+		seeked = append(seeked, path)
+	}
+
+	return seeked, nil
+}
+
+func (fs *FileScanner) ServiceName(path string) string {
+	return strings.TrimSuffix(filepath.Base(path), ".log")
+}
+
 func (fs *FileScanner) scanFromOffset(ctx context.Context, path string, f formatter.LogFormatter) {
-	service := strings.TrimSuffix(filepath.Base(path), ".log")
+	service := fs.ServiceName(path)
 	offset := fs.offsets[path]
 
 	size, err := fs.logFileReader.Size(

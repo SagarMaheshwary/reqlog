@@ -805,6 +805,154 @@ func TestFileScanner_Follow(t *testing.T) {
 	}
 }
 
+func TestFileScanner_SeekToEnd(t *testing.T) {
+	dir := t.TempDir()
+
+	files := map[string]string{
+		"auth.log": "2024-03-10T12:00:00Z request arrived user=123\n",
+		"db.log":   "2024-03-10T12:00:00Z query executed\n2024-03-10T12:00:01Z query executed\n",
+	}
+
+	paths := []string{}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		writeFile(t, path, []byte(content))
+		paths = append(paths, path)
+	}
+
+	fs := newTestFileScanner(&Config{MatchAll: true})
+
+	followable, err := fs.SeekToEnd(t.Context(), paths)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !reflect.DeepEqual(followable, paths) {
+		t.Fatalf("expected followable %v, got %v", paths, followable)
+	}
+
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if fs.offsets[path] != int64(len(content)) {
+			t.Errorf("%s: expected offset %d, got %d", name, len(content), fs.offsets[path])
+		}
+	}
+}
+
+func TestFileScanner_SeekToEnd_SkipsFilesWithSizeError(t *testing.T) {
+	fs := newTestFileScanner(&Config{MatchAll: true})
+
+	fs.logFileReader = &mockLogFileReader{
+		sizeFn: func(ctx context.Context, path string) (int64, error) {
+			if path == "app.log" {
+				return 0, errors.New("size failed")
+			}
+			return 42, nil
+		},
+	}
+
+	followable, err := fs.SeekToEnd(t.Context(), []string{"app.log", "db.log"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !reflect.DeepEqual(followable, []string{"db.log"}) {
+		t.Fatalf("expected followable %v, got %v", []string{"db.log"}, followable)
+	}
+
+	if _, ok := fs.offsets["app.log"]; ok {
+		t.Fatalf("expected no offset to be recorded, got %d", fs.offsets["app.log"])
+	}
+
+	if fs.offsets["db.log"] != 42 {
+		t.Fatalf("expected db.log offset 42, got %d", fs.offsets["db.log"])
+	}
+
+	diags := fs.diagnostics.Entries()
+
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
+	}
+
+	want := "Error reading file app.log: size failed"
+
+	if diags[0].Message != want {
+		t.Fatalf("expected %q got %q", want, diags[0].Message)
+	}
+}
+
+func TestFileScanner_SeekToEnd_FollowEmitsOnlyAppendedLines(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "auth.log")
+
+	writeFile(t, path, []byte(
+		"2024-03-10T12:00:00Z existing line user=123\n"+
+			"2024-03-10T12:00:01Z existing line user=456\n",
+	))
+
+	var out bytes.Buffer
+
+	lp := NewLineProcessor(&Config{MatchAll: true, Keys: []string{"user"}}, NewTimeParser())
+	fs := NewFileScanner(&FileScannerOpts{
+		LineProcessor:  lp,
+		FollowInterval: 10 * time.Millisecond,
+		Out:            &out,
+		Now:            time.Now(),
+		LogFileReader:  transport.NewLogFileReader(nil),
+		Diagnostics:    diagnostics.NewDiagnostics(),
+	})
+
+	if _, err := fs.SeekToEnd(t.Context(), []string{path}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+
+		f.WriteString("2024-03-10T12:00:02Z new line user=789\n")
+		f.WriteString("2024-03-10T12:00:03Z new line without key\n")
+	}()
+
+	fs.Follow(ctx, []string{path}, &testFormatter{})
+
+	lines := strings.FieldsFunc(out.String(), func(r rune) bool { return r == '\n' || r == '\r' })
+
+	want := []string{
+		"2024-03-10T12:00:02Z [auth] new line user=789",
+		"2024-03-10T12:00:03Z [auth] new line without key ",
+	}
+
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("expected %q, got %q", want, lines)
+	}
+}
+
+func TestFileScanner_ServiceName(t *testing.T) {
+	fs := newTestFileScanner(&Config{})
+
+	tests := map[string]string{
+		"/var/log/app/auth.log":      "auth",
+		"logs/nested/db-service.log": "db-service",
+		"worker":                     "worker",
+		"archive.log.1":              "archive.log.1",
+	}
+
+	for path, want := range tests {
+		if got := fs.ServiceName(path); got != want {
+			t.Errorf("%s: expected %q, got %q", path, want, got)
+		}
+	}
+}
+
 func TestFileScanner_Scan_OpenErrorCreatesDiagnostic(t *testing.T) {
 	cfg := &Config{
 		SearchValue: "123",

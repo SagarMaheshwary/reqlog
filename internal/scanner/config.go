@@ -14,4 +14,5 @@ type Config struct {
 	Latest      bool
 	Context     int
 	Format      config.LogFormat
+	MatchAll    bool
 }

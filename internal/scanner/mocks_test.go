@@ -1,11 +1,14 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
@@ -76,4 +79,36 @@ func (m *mockLogFileReader) ListFiles(
 	opts transport.ListOptions,
 ) ([]string, error) {
 	return m.listFilesFn(ctx, dir, opts)
+}
+
+// overlapDetectingWriter records whether Write is ever entered by more than
+// one goroutine at a time. Each Write briefly yields to widen the window in
+// which unsynchronized callers would overlap.
+type overlapDetectingWriter struct {
+	active     atomic.Int32
+	overlapped atomic.Bool
+
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *overlapDetectingWriter) Write(p []byte) (int, error) {
+	if w.active.Add(1) > 1 {
+		w.overlapped.Store(true)
+	}
+	defer w.active.Add(-1)
+
+	time.Sleep(100 * time.Microsecond)
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return w.buf.Write(p)
+}
+
+func (w *overlapDetectingWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return w.buf.String()
 }

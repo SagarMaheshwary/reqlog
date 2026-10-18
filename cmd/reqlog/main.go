@@ -33,11 +33,9 @@ func main() {
 		return
 	}
 
-	if flag.NArg() < 1 {
-		if flag.NArg() < 1 {
-			fmt.Println(cli.Info())
-			os.Exit(1)
-		}
+	if flag.NArg() < 1 && !cfg.Follow {
+		fmt.Println(cli.Info())
+		os.Exit(1)
 	}
 
 	cfg.SearchValue = flag.Arg(0)
