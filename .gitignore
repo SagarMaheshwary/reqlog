@@ -2,3 +2,5 @@ logs/*
 bench/*
 reqlog
 !cmd/reqlog/
+coverage*
+demo*
