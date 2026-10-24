@@ -23,6 +23,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	scannerSources, err := scannersForConfig(cfg, lp, dg)
 	if err != nil {
+		if cfg.Verbose {
+			printDiagnostics(cfg, dg)
+		}
 		return err
 	}
 
@@ -77,6 +80,20 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+func printDiagnostics(cfg *config.Config, dg *diagnostics.Diagnostics) {
+	entries := dg.Entries()
+
+	f := formatter.NewFormatter(&formatter.Opts{
+		Entries: entries,
+		Output:  cfg.Output,
+		Fields:  cfg.Fields,
+	})
+
+	for _, e := range entries {
+		fmt.Println(f.Format(e))
+	}
 }
 
 func newLineProcessor(cfg *config.Config) *scanner.LineProcessor {

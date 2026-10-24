@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/sagarmaheshwary/reqlog/internal/domain"
@@ -9,6 +10,7 @@ import (
 const service = "reqlog"
 
 type Diagnostics struct {
+	mu    sync.Mutex
 	items []domain.LogEntry
 }
 
@@ -24,13 +26,7 @@ func (d *Diagnostics) Error(msg string, fields map[string]any) {
 	}
 	fields["level"] = "error"
 
-	d.items = append(d.items, domain.LogEntry{
-		Service:       service,
-		Message:       msg,
-		Fields:        fields,
-		Timestamp:     time.Now().UTC(),
-		IsDiagnostics: true,
-	})
+	d.add(msg, fields)
 }
 
 func (d *Diagnostics) Warn(msg string, fields map[string]any) {
@@ -39,6 +35,20 @@ func (d *Diagnostics) Warn(msg string, fields map[string]any) {
 	}
 	fields["level"] = "warn"
 
+	d.add(msg, fields)
+}
+
+func (d *Diagnostics) Entries() []domain.LogEntry {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return append([]domain.LogEntry(nil), d.items...)
+}
+
+func (d *Diagnostics) add(msg string, fields map[string]any) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.items = append(d.items, domain.LogEntry{
 		Service:       service,
 		Message:       msg,
@@ -46,8 +56,4 @@ func (d *Diagnostics) Warn(msg string, fields map[string]any) {
 		Timestamp:     time.Now().UTC(),
 		IsDiagnostics: true,
 	})
-}
-
-func (d *Diagnostics) Entries() []domain.LogEntry {
-	return d.items
 }
