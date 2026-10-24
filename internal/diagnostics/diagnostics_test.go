@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -127,5 +128,32 @@ func TestDiagnostics_NilFields(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestDiagnostics_Concurrent(t *testing.T) {
+	d := NewDiagnostics()
+
+	const n = 100
+	var wg sync.WaitGroup
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			if i%2 == 0 {
+				d.Error("failed", nil)
+			} else {
+				d.Warn("warning", nil)
+			}
+			_ = d.Entries()
+		}(i)
+	}
+
+	wg.Wait()
+
+	if got := len(d.Entries()); got != n {
+		t.Fatalf("expected %d entries, got %d", n, got)
 	}
 }

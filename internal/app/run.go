@@ -23,6 +23,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	scannerSources, err := scannersForConfig(cfg, lp, dg)
 	if err != nil {
+		if cfg.Verbose {
+			printDiagnostics(cfg, dg)
+		}
 		return err
 	}
 
@@ -32,21 +35,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 	}()
 
-	var allEntries []domain.LogEntry
-
-	for i, ss := range scannerSources {
-		sources, err := resolveSource(ctx, ss.scanner)
-		if err != nil {
-			return err
-		}
-		scannerSources[i].sources = append(ss.sources, sources...)
-
-		entries, err := ss.scanner.Scan(ctx, sources)
-		if err != nil {
-			return err
-		}
-
-		allEntries = append(allEntries, entries...)
+	allEntries, err := scanSources(ctx, cfg, scannerSources)
+	if err != nil {
+		return err
 	}
 
 	sort.Slice(allEntries, func(i, j int) bool {
@@ -70,7 +61,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	f := formatter.NewFormatter(&formatter.Opts{
-		Entries:    allEntries,
+		Entries:    formatterEntries(cfg, allEntries, scannerSources),
 		SearchKeys: cfg.Keys,
 		Output:     cfg.Output,
 		Context:    cfg.Context,
@@ -91,6 +82,20 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
+func printDiagnostics(cfg *config.Config, dg *diagnostics.Diagnostics) {
+	entries := dg.Entries()
+
+	f := formatter.NewFormatter(&formatter.Opts{
+		Entries: entries,
+		Output:  cfg.Output,
+		Fields:  cfg.Fields,
+	})
+
+	for _, e := range entries {
+		fmt.Println(f.Format(e))
+	}
+}
+
 func newLineProcessor(cfg *config.Config) *scanner.LineProcessor {
 	return scanner.NewLineProcessor(&scanner.Config{
 		Dir:         cfg.Dir,
@@ -104,7 +109,70 @@ func newLineProcessor(cfg *config.Config) *scanner.LineProcessor {
 		Latest:      cfg.Latest,
 		Context:     cfg.Context,
 		Format:      cfg.Format,
+		MatchAll:    cfg.LiveOnly(),
 	}, scanner.NewTimeParser())
+}
+
+// scanSources resolves the sources of every scanner and collects existing
+// matches. In live-only mode existing content is skipped instead, so only
+// newly appended lines are emitted once following starts.
+func scanSources(
+	ctx context.Context,
+	cfg *config.Config,
+	scannerSources []scannerSource,
+) ([]domain.LogEntry, error) {
+	var allEntries []domain.LogEntry
+
+	for i, ss := range scannerSources {
+		sources, err := resolveSource(ctx, ss.scanner)
+		if err != nil {
+			return nil, err
+		}
+		scannerSources[i].sources = append(ss.sources, sources...)
+
+		if cfg.LiveOnly() {
+			followable, err := ss.scanner.SeekToEnd(ctx, sources)
+			if err != nil {
+				return nil, err
+			}
+			scannerSources[i].sources = followable
+			continue
+		}
+
+		entries, err := ss.scanner.Scan(ctx, sources)
+		if err != nil {
+			return nil, err
+		}
+
+		allEntries = append(allEntries, entries...)
+	}
+
+	return allEntries, nil
+}
+
+// formatterEntries returns the entries used to size the formatter's service
+// column. In live-only mode there are no initial results to measure, so a
+// placeholder entry is added for every followed source.
+func formatterEntries(
+	cfg *config.Config,
+	entries []domain.LogEntry,
+	scannerSources []scannerSource,
+) []domain.LogEntry {
+	if !cfg.LiveOnly() {
+		return entries
+	}
+
+	out := append([]domain.LogEntry(nil), entries...)
+	for _, ss := range scannerSources {
+		for _, source := range ss.sources {
+			out = append(out, domain.LogEntry{
+				Service: ss.scanner.ServiceName(source),
+				Host:    ss.host,
+			})
+		}
+	}
+
+	return out
 }
 
 func resolveSource(
@@ -191,6 +259,7 @@ func scannersForConfig(
 			scanners = append(scanners, scannerSource{
 				scanner:   scn,
 				sshClient: sshClient,
+				host:      host,
 				sources:   make([]string, 0),
 			})
 			mu.Unlock()

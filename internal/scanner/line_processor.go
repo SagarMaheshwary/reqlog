@@ -28,6 +28,10 @@ func NewLineProcessor(cfg *Config, tp TimeParser) *LineProcessor {
 }
 
 func (lp *LineProcessor) ProcessLine(line, service string, host string) (*domain.LogEntry, bool) {
+	if lp.config.MatchAll {
+		return lp.Parse(line, service, host, true)
+	}
+
 	// fast pre-filter (return if searchValue is not present in the line string)
 	if lp.config.IgnoreCase {
 		if !containsFoldASCII(line, lp.config.SearchValue) {

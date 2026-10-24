@@ -8,6 +8,7 @@ import (
 type scannerSource struct {
 	scanner scanner.Scanner
 	sources []string
+	host    string
 
 	sshClient *ssh.Client
 }
