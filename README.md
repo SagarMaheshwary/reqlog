@@ -55,7 +55,7 @@ Unlike `grep`, reqlog understands timestamps, JSON logs, Docker logs, multi-host
 
 - Search logs across multiple files
 - Trace requests using `request_id`, `trace_id`, and `correlation_id`
-- Stream live logs in real time (`-f`)
+- Stream live logs in real time (`-f`), with or without a search value
 - Search and stream Docker container logs
 - Search and stream logs on remote servers over SSH
 - JSON log parsing with automatic detection
@@ -80,6 +80,12 @@ Stream live logs in real time:
 
 ```bash
 reqlog -f abc123
+```
+
+Stream all new log lines without a search value:
+
+```bash
+reqlog -f
 ```
 
 Search Docker containers:
@@ -112,6 +118,14 @@ Supported Architectures
 
 - `amd64`
 - `arm64`
+
+**Quick Install (macOS/Linux)**
+
+```text
+curl -sSL https://raw.githubusercontent.com/sagarmaheshwary/reqlog/master/install.sh | bash
+```
+
+> The script installs the binary to `/usr/local/bin/reqlog` and uses `sudo` for that step.
 
 **Go Install**
 
@@ -204,6 +218,16 @@ reqlog -k event_key order.created
 ```bash
 reqlog -f abc123
 ```
+
+Omit the search value to stream every new log line instead:
+
+```bash
+reqlog -f
+reqlog -f -S docker
+reqlog -f -H srv1,srv2
+```
+
+> Without a search value, existing logs are skipped and only lines written after reqlog starts are shown.
 
 **Docker Logs**
 

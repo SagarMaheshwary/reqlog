@@ -28,6 +28,8 @@ reqlog searches using common tracing keys by default:
 
 Use `--key` (`-k`) to override the default search key.
 
+The search value is optional when using `--follow` (`-f`). See [Live Log Streaming](#live-log-streaming).
+
 ## Flags
 
 | Flag            | Shorthand | Default                                    | Description                                                            |
@@ -206,6 +208,22 @@ reqlog -i -k event_key ORDER.CREATED
 reqlog -f abc123
 ```
 
+#### Streaming Without a Search Value
+
+Omit the search value to stream every new log line:
+
+```bash
+reqlog -f
+reqlog -f -s api-gateway,order-service
+reqlog -f -S docker
+reqlog -f -H srv1,srv2
+```
+
+- Existing logs are skipped; only lines written after reqlog starts are shown.
+- Source and filtering flags such as `-d`, `-r`, `-s`, `-S`, and `-H` work as usual.
+- Lines that can't be parsed (for example, text lines without a leading timestamp) are skipped.
+- Log files whose size can't be read at startup are skipped and reported with `-V` / `--verbose`.
+
 ### Recursive Scan
 
 Recursively scan a directory for logs:
@@ -297,6 +315,8 @@ Example output:
 Diagnostics use the service name `reqlog` to distinguish them from log entries returned by searched files, containers, or remote hosts.
 
 When possible, reqlog continues searching other sources and reports failures as diagnostics instead of aborting the search.
+
+If none of the hosts passed to `-H` can be reached, reqlog exits with an error. With `-V`, the connection error for each host is printed before exiting.
 
 ## JSON Output
 
